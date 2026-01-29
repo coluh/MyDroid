@@ -9,6 +9,7 @@ import com.destywen.mydroid.data.local.JournalDao
 import com.destywen.mydroid.data.local.JournalEntity
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -22,34 +23,74 @@ data class Comment(
 data class Journal(
     val id: Int,
     val content: String,
-    val tag: String,
+    val tags: List<String>,
     val comments: List<Comment>,
     val timestamp: Long
 )
 
+data class JournalScreenState(
+    val journals: List<Journal>,
+    val tags: List<String>
+)
+
 class JournalViewModel(private val dao: JournalDao) : ViewModel() {
-    private val journals = dao.getAllJournals()
-    private val comments = dao.getAllComments()
+    private val journalsFlow = dao.getAllJournals()
+    private val commentsFlow = dao.getAllComments()
 
-    val items = combine(journals, comments) { journals, comments ->
-        journals.map { j ->
-            Journal(j.id, j.content, j.tag, comments.filter { it.journalId == j.id }.map { c ->
-                Comment(
-                    id = c.id, name = c.name, content = c.content, timestamp = c.time
+    private val commentsByJournalId = commentsFlow.map { comments -> comments.groupBy { it.journalId } }
+
+    val state = combine(journalsFlow, commentsByJournalId) { journals, commentMap ->
+        JournalScreenState(
+            journals = journals.map { j ->
+                Journal(
+                    id = j.id,
+                    content = j.content,
+                    tags = if (j.tag.isNotBlank()) {
+                        j.tag.split(",")
+                    } else {
+                        emptyList()
+                    },
+                    comments = commentMap[j.id].orEmpty().map { c ->
+                        Comment(
+                            id = c.id,
+                            name = c.name,
+                            content = c.content,
+                            timestamp = c.time
+                        )
+                    },
+                    timestamp = j.time
                 )
-            }, j.time
-            )
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            },
+            tags = buildSet<String> {
+                journals.forEach { j ->
+                    j.tag.split(",").forEach { tag ->
+                        if (tag.isNotBlank()) {
+                            add(tag)
+                        }
+                    }
+                }
+            }.toList()
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JournalScreenState(emptyList(), emptyList()))
 
-    fun addJournal(content: String, tag: String) = viewModelScope.launch {
-        dao.upsertJournal(JournalEntity(content = content, tag = tag))
+    fun addJournal(content: String, tags: List<String>) = viewModelScope.launch {
+        val tagString = tags.asSequence()
+            .flatMap { it.split(",") }
+            .map { it.trim() }.filter { it.isNotEmpty() }
+            .distinct()
+            .joinToString(",")
+        dao.upsertJournal(JournalEntity(content = content, tag = tagString))
     }
 
-    fun updateJournal(id: Int, content: String, tag: String) = viewModelScope.launch {
+    fun updateJournal(id: Int, content: String, tags: List<String>) = viewModelScope.launch {
         // keep time
-        val createdTime = items.value.first { it.id == id }.timestamp
-        dao.upsertJournal(JournalEntity(id = id, content = content, tag = tag, time = createdTime))
+        val tagString = tags.asSequence()
+            .flatMap { it.split(",") }
+            .map { it.trim() }.filter { it.isNotEmpty() }
+            .distinct()
+            .joinToString(",")
+        val createdTime = state.value.journals.first { it.id == id }.timestamp
+        dao.upsertJournal(JournalEntity(id = id, content = content, tag = tagString, time = createdTime))
     }
 
     fun addComment(journalId: Int, content: String) = viewModelScope.launch {

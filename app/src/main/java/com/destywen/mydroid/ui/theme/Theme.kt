@@ -89,16 +89,6 @@ private val darkScheme = darkColorScheme(
     surfaceContainerHighest = surfaceContainerHighestDark,
 )
 
-val MyShapes = Shapes(
-    extraSmall = ShapeDefaults.ExtraSmall,
-    small = ShapeDefaults.ExtraSmall,
-    medium = ShapeDefaults.ExtraSmall,
-    large = ShapeDefaults.ExtraSmall,
-    extraLarge = ShapeDefaults.ExtraSmall,
-)
-
-val MyTypography = Typography()
-
 @Composable
 fun MyDroidTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -118,8 +108,8 @@ fun MyDroidTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        shapes = MyShapes,
-        typography = MyTypography,
+        shapes = Shapes(),
+        typography = Typography(),
         content = content
     )
 }

@@ -5,10 +5,10 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-fun Long.toLocalDateTime(): LocalDateTime {
-    return Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDateTime()
+fun timestampToLocalDateTime(timestamp: Long): LocalDateTime {
+    return Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDateTime();
 }
 
-fun Long.toLocalDateTimeString(): String {
-    return this.toLocalDateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+fun timestampToLocalDateTimeString(timestamp: Long): String {
+    return timestampToLocalDateTime(timestamp).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
 }

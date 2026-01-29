@@ -44,7 +44,6 @@ import com.destywen.mydroid.ui.screen.journal.JournalScreen
 import com.destywen.mydroid.ui.screen.journal.JournalViewModel
 import kotlinx.coroutines.launch
 
-
 enum class Screen(@StringRes val label: Int, val icon: ImageVector) {
     HOME(R.string.home, Icons.Default.Home),
     JOURNAL(R.string.journal, Icons.Default.Create),
