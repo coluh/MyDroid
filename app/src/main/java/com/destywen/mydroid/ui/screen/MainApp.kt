@@ -39,6 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.AppDatabase
+import com.destywen.mydroid.data.remote.AiChatService
+import com.destywen.mydroid.data.remote.NetworkModule
+import com.destywen.mydroid.ui.screen.chat.ChatScreen
+import com.destywen.mydroid.ui.screen.chat.ChatViewModel
 import com.destywen.mydroid.ui.screen.home.HomeScreen
 import com.destywen.mydroid.ui.screen.journal.JournalScreen
 import com.destywen.mydroid.ui.screen.journal.JournalViewModel
@@ -103,6 +107,12 @@ fun MainApp(database: AppDatabase) {
                 val journalViewModel: JournalViewModel =
                     viewModel(factory = JournalViewModel.Factory(database.journalDao()))
                 JournalScreen(journalViewModel, onNavigate)
+            }
+
+            Screen.CHAT -> {
+                val viewModel: ChatViewModel =
+                    viewModel(factory = ChatViewModel.Factory(AiChatService(NetworkModule.client)))
+                ChatScreen(viewModel, onNavigate)
             }
 
             else -> HomeScreen(onNavigate)

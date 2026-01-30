@@ -29,8 +29,8 @@ data class Journal(
 )
 
 data class JournalScreenState(
-    val journals: List<Journal>,
-    val tags: List<String>
+    val journals: List<Journal> = emptyList(),
+    val tags: List<String> = emptyList()
 )
 
 class JournalViewModel(private val dao: JournalDao) : ViewModel() {
@@ -61,7 +61,7 @@ class JournalViewModel(private val dao: JournalDao) : ViewModel() {
                     timestamp = j.time
                 )
             },
-            tags = buildSet<String> {
+            tags = buildSet {
                 journals.forEach { j ->
                     j.tag.split(",").forEach { tag ->
                         if (tag.isNotBlank()) {
@@ -71,7 +71,7 @@ class JournalViewModel(private val dao: JournalDao) : ViewModel() {
                 }
             }.toList()
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JournalScreenState(emptyList(), emptyList()))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JournalScreenState())
 
     fun addJournal(content: String, tags: List<String>) = viewModelScope.launch {
         val tagString = tags.asSequence()
