@@ -38,6 +38,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.destywen.mydroid.R
+import com.destywen.mydroid.data.local.AgentSettings
 import com.destywen.mydroid.data.local.AppDatabase
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.NetworkModule
@@ -59,7 +60,7 @@ enum class Screen(@StringRes val label: Int, val icon: ImageVector) {
 }
 
 @Composable
-fun MainApp(database: AppDatabase) {
+fun MainApp(database: AppDatabase, agentSettings: AgentSettings) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var currentScreen by rememberSaveable { mutableStateOf(Screen.HOME) }
@@ -111,7 +112,7 @@ fun MainApp(database: AppDatabase) {
 
             Screen.CHAT -> {
                 val viewModel: ChatViewModel =
-                    viewModel(factory = ChatViewModel.Factory(AiChatService(NetworkModule.client)))
+                    viewModel(factory = ChatViewModel.Factory(AiChatService(NetworkModule.client), agentSettings))
                 ChatScreen(viewModel, onNavigate)
             }
 

@@ -1,5 +1,7 @@
 package com.destywen.mydroid.data.remote
 
+import android.util.Log
+import com.destywen.mydroid.data.local.ChatAgent
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -13,9 +15,15 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.utils.io.readLine
 import io.ktor.utils.io.readUTF8Line
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.Json
 
 object NetworkModule {
@@ -37,31 +45,33 @@ object NetworkModule {
 }
 
 class AiChatService(private val client: HttpClient) {
-    private val endpoint = ""
-    private val apiKey = ""
 
+    private val TAG: String = "colo"
     private val decoder = Json { ignoreUnknownKeys = true }
 
-    fun streamChat(prompt: List<Message>, modelName: String): Flow<String> = flow {
-        client.preparePost(endpoint) {
-            header("Authorization", "Bearer $apiKey")
+    fun streamChat(prompt: List<Message>, config: ChatAgent): Flow<String> = channelFlow {
+        client.preparePost(config.endpoint) {
+            header("Authorization", "Bearer ${config.apiKey}")
             contentType(ContentType.Application.Json)
-            setBody(ChatRequest(model = modelName, messages = prompt, stream = true))
+            setBody(ChatRequest(model = config.modelName, messages = prompt, stream = true))
         }.execute { response ->
             val channel = response.bodyAsChannel()
             while (!channel.isClosedForRead) {
-                val line = channel.readUTF8Line() ?: break
+                val line = channel.readLine() ?: break
+                Log.d(TAG, "streamChat: read $line")
                 if (line.startsWith("data: ")) {
-                    val data = line.removePrefix("data:").trim()
+                    val data = line.removePrefix("data: ").trim()
                     if (data == "[DONE]") break
                     try {
                         val delta = decoder.decodeFromString<ChatStreamResponse>(data)
                             .choices.firstOrNull()?.delta?.content
-                        if (delta != null) emit(delta)
+                        if (delta != null) {
+                            send(delta)
+                        }
                     } catch (_: Exception) {
                     }
                 }
             }
         }
-    }
+    }.flowOn(Dispatchers.IO)
 }
