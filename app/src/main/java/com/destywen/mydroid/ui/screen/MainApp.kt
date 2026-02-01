@@ -112,7 +112,13 @@ fun MainApp(database: AppDatabase, agentSettings: AgentSettings) {
 
             Screen.CHAT -> {
                 val viewModel: ChatViewModel =
-                    viewModel(factory = ChatViewModel.Factory(AiChatService(NetworkModule.client), agentSettings))
+                    viewModel(
+                        factory = ChatViewModel.Factory(
+                            AiChatService(NetworkModule.client),
+                            database.chatDao(),
+                            agentSettings
+                        )
+                    )
                 ChatScreen(viewModel, onNavigate)
             }
 

@@ -18,11 +18,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,55 +34,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun <T> Dropdown(
-    modifier: Modifier = Modifier,
-    options: List<T>,
-    toText: (T) -> String,
-    selected: T? = null,
-    label: @Composable (() -> Unit)? = null,
-    onSelect: (T) -> Unit
-) {
-    var shouldExpand by remember { mutableStateOf(false) }
-
-    val expanded = shouldExpand && options.isNotEmpty()
-    val showText = if (selected == null) "-- - --" else toText(selected)
-
-    ExposedDropdownMenuBox(modifier = modifier, expanded = expanded, onExpandedChange = { shouldExpand = it }) {
-        TextField(
-            value = showText,
-            onValueChange = {},
-            readOnly = true,
-            textStyle = LocalTextStyle.current.copy(fontWeight = FontWeight.Bold),
-            label = label,
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .menuAnchor(),
-            colors = ExposedDropdownMenuDefaults.textFieldColors(
-                unfocusedContainerColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-            ),
-            singleLine = true
-        )
-
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { shouldExpand = false }) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(toText(option)) },
-                    onClick = {
-                        shouldExpand = false
-                        onSelect(option)
-                    }
-                )
-            }
-        }
-    }
-}
 
 // TODO: optimize
 @OptIn(ExperimentalMaterial3Api::class)
@@ -151,6 +102,55 @@ fun EditableDropdown(
                     onClick = {
                         input = option
                         onValueChange(input)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun StringSelect(
+    modifier: Modifier = Modifier,
+    options: List<String>,
+    default: String? = options.firstOrNull(),
+    label: @Composable (() -> Unit)? = null,
+    onValueChange: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var selected by rememberSaveable { mutableStateOf(default) }
+
+    LaunchedEffect(Unit) {
+        default?.let {
+            onValueChange(default)
+        }
+    }
+
+    ExposedDropdownMenuBox(modifier = modifier, expanded = expanded, onExpandedChange = { expanded = it }) {
+        TextField(
+            value = selected ?: "",
+            onValueChange = {},
+            modifier = Modifier.menuAnchor(),
+            readOnly = true,
+            singleLine = true,
+            label = label,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.textFieldColors(
+                unfocusedContainerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+            )
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        selected = option
+                        expanded = false
+                        onValueChange(option)
                     }
                 )
             }

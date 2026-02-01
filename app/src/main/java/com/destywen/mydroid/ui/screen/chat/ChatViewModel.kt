@@ -1,19 +1,24 @@
 package com.destywen.mydroid.ui.screen.chat
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.destywen.mydroid.data.local.AgentSettings
 import com.destywen.mydroid.data.local.ChatAgent
+import com.destywen.mydroid.data.local.ChatDao
+import com.destywen.mydroid.data.local.ChatMessageEntity
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.Message
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -28,31 +33,45 @@ data class ChatScreenState(
     val allAgents: List<ChatAgent> = emptyList(),
     val selectedAgent: ChatAgent? = null,
     val isResponding: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val userInput: String? = null
 )
 
-class ChatViewModel(private val service: AiChatService, private val agentSettings: AgentSettings) : ViewModel() {
+class ChatViewModel(
+    private val service: AiChatService,
+    private val chatDao: ChatDao,
+    private val agentSettings: AgentSettings
+) : ViewModel() {
     private val _agentsFlow = agentSettings.agentsFlow
-    private val _selectedIdFlow = agentSettings.selectedAgentIdFlow
+    private val _selectedId = agentSettings.selectedAgentIdFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val _dbMessages = _selectedId.flatMapLatest { id ->
+        if (id == null) flowOf(emptyList())
+        else chatDao.getMessagesByAgent(id)
+    }
+
+    private val _generatingMessage = MutableStateFlow<List<ChatMessage>>(emptyList())
     private val _isResponding = MutableStateFlow(false)
     private val _error = MutableStateFlow<String?>(null)
+    private val _userInput = MutableStateFlow<String?>(null)
 
     val state: StateFlow<ChatScreenState> = combine(
-        _messages, _agentsFlow, _selectedIdFlow, _isResponding, _error
-    ) { messages, agents, selectedId, isResponding, error ->
-        val activeAgent = agents.find { it.id == selectedId } ?: agents.firstOrNull()
+        combine(_dbMessages, _generatingMessage, _agentsFlow) { db, gen, agents -> Triple(db, gen, agents) },
+        combine(_selectedId, _isResponding, _error) { id, resp, err -> Triple(id, resp, err) },
+        _userInput
+    ) { (db, gen, agents), (id, resp, err), input ->
+        val activeAgent = agents.find { it.id == id } ?: agents.firstOrNull()
         ChatScreenState(
-            messages = messages,
+            messages = db.map { ChatMessage(it.content, it.role == "user") } + gen,
             allAgents = agents,
             selectedAgent = activeAgent,
-            isResponding = isResponding,
-            error = error
+            isResponding = resp,
+            error = err,
+            userInput = input
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = ChatScreenState())
-
-    private val chatHistory = mutableListOf<Message>()
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, ChatScreenState())
 
     fun sendMessage(content: String) {
         if (content.isBlank()) {
@@ -66,35 +85,48 @@ class ChatViewModel(private val service: AiChatService, private val agentSetting
             return
         }
 
-        // add user message
-        _messages.update { it + ChatMessage(content, true) }
-        _isResponding.update { true }
-        chatHistory.add(Message("user", content))
-
-        // build context
-        val apiMessage = mutableListOf<Message>()
-        if (agent.systemPrompt.isNotBlank()) {
-            apiMessage.add(Message(role = "system", content = agent.systemPrompt))
-        }
-        apiMessage.addAll(chatHistory)
-
         viewModelScope.launch {
-            var fullResponse = ""
-            _messages.update { it + ChatMessage("", false) }
 
-            service.streamChat(apiMessage, agent)
+            _generatingMessage.update { listOf(ChatMessage(content, true)) }
+            _isResponding.update { true }
+            val history = buildList {
+                if (agent.systemPrompt.isNotBlank()) {
+                    add(Message("system", agent.systemPrompt))
+                }
+                addAll(_dbMessages.first().takeLast(20).map {
+                    Message(it.role, it.content)
+                })
+                add(Message("user", content))
+            }
+
+            var fullResponse = ""
+
+            service.streamChat(history, agent)
                 .catch { e ->
-                    _error.update { e.message }
+                    _userInput.update { content }
+                    _generatingMessage.update { emptyList() }
                     _isResponding.update { false }
+                    _error.update { e.message }
                 }
                 .collect { token ->
-                    Log.d("colo", "sendMessage: receive token length=${token.length}")
                     fullResponse += token
-                    _messages.update { it.dropLast(1) + ChatMessage(fullResponse, false) }
+                    _generatingMessage.update { listOf(ChatMessage(content, true), ChatMessage(fullResponse, false)) }
                 }
 
-            chatHistory.add(Message("assistant", fullResponse))
+            if (!_isResponding.value) {
+                return@launch
+            }
+
+            chatDao.insertMessage(ChatMessageEntity(agentId = agent.id, role = "user", content = content))
+            chatDao.insertMessage(ChatMessageEntity(agentId = agent.id, role = "assistant", content = fullResponse))
+            _generatingMessage.update { emptyList() }
             _isResponding.update { false }
+        }
+    }
+
+    fun deleteHistory(agentId: String) {
+        viewModelScope.launch {
+            chatDao.clearHistory(agentId)
         }
     }
 
@@ -122,9 +154,9 @@ class ChatViewModel(private val service: AiChatService, private val agentSetting
     }
 
     companion object {
-        fun Factory(service: AiChatService, settings: AgentSettings) = viewModelFactory {
+        fun Factory(service: AiChatService, dao: ChatDao, settings: AgentSettings) = viewModelFactory {
             initializer {
-                ChatViewModel(service, settings)
+                ChatViewModel(service, dao, settings)
             }
         }
     }

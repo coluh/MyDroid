@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -29,8 +31,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -39,6 +44,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,7 +68,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.ChatAgent
 import com.destywen.mydroid.ui.components.BottomModal
-import com.destywen.mydroid.ui.components.Dropdown
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -91,7 +96,7 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
     }
     LaunchedEffect(state.messages) {
         if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.lastIndex) // TODO: scroll to bottom
+            listState.animateScrollToItem(state.messages.size)
         }
     }
 
@@ -106,7 +111,7 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                 },
                 actions = {
                     var menuExpanded by remember { mutableStateOf(false) }
-                    Dropdown(
+                    ModelSelector(
                         modifier = Modifier.width(200.dp),
                         options = state.allAgents,
                         toText = { "${it.name} - ${it.modelName}" },
@@ -143,6 +148,13 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                                     showList = true
                                 }
                             )
+                            DropdownMenuItem(
+                                text = { Text("清空") },
+                                onClick = {
+                                    menuExpanded = false
+                                    state.selectedAgent?.let { viewModel.deleteHistory(it.id) }
+                                }
+                            )
                         }
                     }
                 }
@@ -169,9 +181,12 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                 items(state.messages) { msg ->
                     ChatBubble(msg)
                 }
+                item {
+                    Spacer(modifier = Modifier.height(0.dp))
+                }
             }
 
-            UserInput(modifier = Modifier.fillMaxWidth(), !state.isResponding) {
+            UserInput(modifier = Modifier.fillMaxWidth(), state.userInput, !state.isResponding) {
                 viewModel.sendMessage(it)
             }
         }
@@ -195,6 +210,7 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
         ) {
             AgentEditor(
                 initial = editingAgent,
+                allAgents = state.allAgents,
                 onDismiss = { showEditor = false },
                 onDelete = { viewModel.deleteAgent(it.id) },
                 onSave = { viewModel.saveAgent(it) }
@@ -207,6 +223,7 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
 @Composable
 fun AgentEditor(
     initial: ChatAgent?,
+    allAgents: List<ChatAgent> = emptyList(),
     onDismiss: () -> Unit,
     onDelete: (agent: ChatAgent) -> Unit = {},
     onSave: (agent: ChatAgent) -> Unit
@@ -230,9 +247,7 @@ fun AgentEditor(
         OutlinedTextField(prompt, { prompt = it }, label = { Text("系统提示词") })
         OutlinedTextField(endpoint, { endpoint = it }, label = { Text("接口地址") })
         OutlinedTextField(apiKey, { apiKey = it }, label = { Text("API KEY") })
-//        EditableDropdown(options = listOf("http1", "http2"), label = { Text("接口地址") }) { endpoint = it }
-//        EditableDropdown(options = emptyList(), label = { Text("API KEY") }) { apiKey = it }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End)) {
             if (initial != null) {
                 TextButton(onClick = { onDelete(initial); onDismiss() }) {
                     Text("删除", color = Color.Red)
@@ -273,8 +288,12 @@ fun AgentEditor(
 }
 
 @Composable
-fun UserInput(modifier: Modifier, enabled: Boolean = true, onSend: (content: String) -> Unit) {
+fun UserInput(modifier: Modifier, text: String? = null, enabled: Boolean = true, onSend: (content: String) -> Unit) {
     var inputText by rememberSaveable { mutableStateOf("") }
+
+    LaunchedEffect(text) {
+        text?.let { inputText = text }
+    }
 
     Surface(modifier = modifier, tonalElevation = 2.dp) {
         Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -300,10 +319,10 @@ fun UserInput(modifier: Modifier, enabled: Boolean = true, onSend: (content: Str
 fun ChatBubble(message: ChatMessage) {
 
     val alignment = if (message.isUser) Alignment.End else Alignment.Start
-    val containerColor = if (message.isUser)
-        MaterialTheme.colorScheme.primaryContainer
-    else
-        MaterialTheme.colorScheme.secondaryContainer
+    val containerColor = when {
+        message.isUser -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.secondaryContainer
+    }
 
     Column(
         modifier = Modifier
@@ -373,6 +392,54 @@ fun AgentList(agents: List<ChatAgent>, onSelect: (ChatAgent) -> Unit) {
                         lineHeight = 1.sp
                     )
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun <T> ModelSelector(
+    modifier: Modifier = Modifier,
+    options: List<T>,
+    toText: (T) -> String,
+    selected: T? = null,
+    label: @Composable (() -> Unit)? = null,
+    onSelect: (T) -> Unit
+) {
+    var shouldExpand by remember { mutableStateOf(false) }
+
+    val expanded = shouldExpand && options.isNotEmpty()
+    val showText = if (selected == null) "-- - --" else toText(selected)
+
+    ExposedDropdownMenuBox(modifier = modifier, expanded = expanded, onExpandedChange = { shouldExpand = it }) {
+        TextField(
+            value = showText,
+            onValueChange = {},
+            readOnly = true,
+            textStyle = LocalTextStyle.current.copy(fontWeight = FontWeight.Bold),
+            label = label,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .menuAnchor(),
+            colors = ExposedDropdownMenuDefaults.textFieldColors(
+                unfocusedContainerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+            ),
+            singleLine = true
+        )
+
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { shouldExpand = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(toText(option)) },
+                    onClick = {
+                        shouldExpand = false
+                        onSelect(option)
+                    }
+                )
             }
         }
     }
