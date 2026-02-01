@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -49,6 +50,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
@@ -61,7 +63,6 @@ import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.ChatAgent
 import com.destywen.mydroid.ui.components.BottomModal
 import com.destywen.mydroid.ui.components.Dropdown
-import com.destywen.mydroid.ui.components.EditableDropdown
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -73,12 +74,12 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
     var showEditor by rememberSaveable { mutableStateOf(false) }
     var showList by rememberSaveable { mutableStateOf(false) }
     var editingAgentId by rememberSaveable { mutableStateOf<String?>(null) }
-    var menuExpanded by remember { mutableStateOf(false) }
-    val listState = rememberLazyListState()
+    val editingAgent = state.allAgents.find { it.id == editingAgentId }
+
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val editingAgent = state.allAgents.find { it.id == editingAgentId } ?: null
     val focusManager = LocalFocusManager.current
 
     LaunchedEffect(state.error) {
@@ -86,6 +87,11 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
             snackbarHostState.showSnackbar(it)
             delay(2000)
             viewModel.clearSnackbar()
+        }
+    }
+    LaunchedEffect(state.messages) {
+        if (state.messages.isNotEmpty()) {
+            listState.animateScrollToItem(state.messages.lastIndex) // TODO: scroll to bottom
         }
     }
 
@@ -99,10 +105,12 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                     }
                 },
                 actions = {
+                    var menuExpanded by remember { mutableStateOf(false) }
                     Dropdown(
                         modifier = Modifier.width(200.dp),
                         options = state.allAgents,
                         toText = { "${it.name} - ${it.modelName}" },
+                        selected = state.selectedAgent,
                         onSelect = {
                             viewModel.selectAgent(it.id)
                         })
@@ -113,18 +121,27 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                             DropdownMenuItem(
                                 text = { Text("设置") },
-                                onClick = { scope.launch { snackbarHostState.showSnackbar("click settings") } }
+                                onClick = {
+                                    menuExpanded = false
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("click settings")
+                                    }
+                                }
                             )
                             DropdownMenuItem(
                                 text = { Text("新建") },
                                 onClick = {
+                                    menuExpanded = false
                                     editingAgentId = null
                                     showEditor = true
                                 }
                             )
                             DropdownMenuItem(
                                 text = { Text("编辑") },
-                                onClick = { showList = true }
+                                onClick = {
+                                    menuExpanded = false
+                                    showList = true
+                                }
                             )
                         }
                     }
@@ -154,39 +171,46 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                 }
             }
 
-            UserInput(modifier = Modifier.fillMaxWidth()) {
+            UserInput(modifier = Modifier.fillMaxWidth(), !state.isResponding) {
                 viewModel.sendMessage(it)
             }
         }
 
-        if (showList) {
-            BottomModal(modifier = Modifier.padding(contentPadding), onDismissRequest = { showList = false }) {
-                AgentList(state.allAgents) { agent ->
-                    showList = false
-                    editingAgentId = agent.id
-                    showEditor = true
-                }
+        BottomModal(
+            visible = showList,
+            modifier = Modifier.padding(contentPadding),
+            onDismissRequest = { showList = false }
+        ) {
+            AgentList(state.allAgents) { agent ->
+                showList = false
+                editingAgentId = agent.id
+                showEditor = true
             }
         }
 
-        if (showEditor) {
-            BottomModal(modifier = Modifier.padding(contentPadding), onDismissRequest = { showEditor = false }) {
-                AgentEditor(
-                    initial = editingAgent,
-                    onSave = {
-                        viewModel.saveAgent(it)
-                        editingAgentId = null
-                    },
-                    onDismiss = { showEditor = false }
-                )
-            }
+        BottomModal(
+            visible = showEditor,
+            modifier = Modifier.padding(contentPadding),
+            onDismissRequest = { showEditor = false }
+        ) {
+            AgentEditor(
+                initial = editingAgent,
+                onDismiss = { showEditor = false },
+                onDelete = { viewModel.deleteAgent(it.id) },
+                onSave = { viewModel.saveAgent(it) }
+            )
         }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AgentEditor(initial: ChatAgent?, onSave: (agent: ChatAgent) -> Unit, onDismiss: () -> Unit) {
+fun AgentEditor(
+    initial: ChatAgent?,
+    onDismiss: () -> Unit,
+    onDelete: (agent: ChatAgent) -> Unit = {},
+    onSave: (agent: ChatAgent) -> Unit
+) {
     var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
     var model by rememberSaveable { mutableStateOf(initial?.modelName ?: "") }
     var prompt by rememberSaveable { mutableStateOf(initial?.systemPrompt ?: "") }
@@ -204,35 +228,44 @@ fun AgentEditor(initial: ChatAgent?, onSave: (agent: ChatAgent) -> Unit, onDismi
         OutlinedTextField(name, { name = it }, label = { Text("名称") })
         OutlinedTextField(model, { model = it }, label = { Text("模型") })
         OutlinedTextField(prompt, { prompt = it }, label = { Text("系统提示词") })
-        EditableDropdown(options = listOf("http1", "http2"), label = { Text("接口地址") }) { endpoint = it }
-        EditableDropdown(options = emptyList(), label = { Text("API KEY") }) { apiKey = it }
+        OutlinedTextField(endpoint, { endpoint = it }, label = { Text("接口地址") })
+        OutlinedTextField(apiKey, { apiKey = it }, label = { Text("API KEY") })
+//        EditableDropdown(options = listOf("http1", "http2"), label = { Text("接口地址") }) { endpoint = it }
+//        EditableDropdown(options = emptyList(), label = { Text("API KEY") }) { apiKey = it }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            if (initial != null) {
+                TextButton(onClick = { onDelete(initial); onDismiss() }) {
+                    Text("删除", color = Color.Red)
+                }
+            }
             TextButton(onClick = { onDismiss() }) {
                 Text("取消")
             }
-            Button(onClick = {
-                onSave(
-                    if (initial != null) {
-                        ChatAgent(
-                            id = initial.id,
-                            name = name,
-                            endpoint = endpoint,
-                            apiKey = apiKey,
-                            modelName = model,
-                            systemPrompt = prompt
-                        )
-                    } else {
-                        ChatAgent(
-                            name = name,
-                            endpoint = endpoint,
-                            apiKey = apiKey,
-                            modelName = model,
-                            systemPrompt = prompt
-                        )
-                    }
-                )
-                onDismiss()
-            }) {
+            Button(
+                enabled = name.isNotBlank() && model.isNotBlank() && endpoint.isNotBlank() && apiKey.isNotBlank(),
+                onClick = {
+                    onSave(
+                        if (initial != null) {
+                            ChatAgent(
+                                id = initial.id,
+                                name = name,
+                                endpoint = endpoint,
+                                apiKey = apiKey,
+                                modelName = model,
+                                systemPrompt = prompt
+                            )
+                        } else {
+                            ChatAgent(
+                                name = name,
+                                endpoint = endpoint,
+                                apiKey = apiKey,
+                                modelName = model,
+                                systemPrompt = prompt
+                            )
+                        }
+                    )
+                    onDismiss()
+                }) {
                 Text("保存")
             }
         }
@@ -240,7 +273,7 @@ fun AgentEditor(initial: ChatAgent?, onSave: (agent: ChatAgent) -> Unit, onDismi
 }
 
 @Composable
-fun UserInput(modifier: Modifier, onSend: (content: String) -> Unit) {
+fun UserInput(modifier: Modifier, enabled: Boolean = true, onSend: (content: String) -> Unit) {
     var inputText by rememberSaveable { mutableStateOf("") }
 
     Surface(modifier = modifier, tonalElevation = 2.dp) {
@@ -251,10 +284,12 @@ fun UserInput(modifier: Modifier, onSend: (content: String) -> Unit) {
                 modifier = Modifier.weight(1f),
                 maxLines = 4
             )
-            IconButton(onClick = {
-                onSend(inputText)
-                inputText = ""
-            }) {
+            IconButton(
+                enabled = enabled && inputText.isNotBlank(),
+                onClick = {
+                    onSend(inputText)
+                    inputText = ""
+                }) {
                 Icon(Icons.AutoMirrored.Filled.Send, null)
             }
         }
@@ -273,9 +308,14 @@ fun ChatBubble(message: ChatMessage) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp), horizontalAlignment = alignment
+            .padding(8.dp),
+        horizontalAlignment = alignment
     ) {
-        Surface(color = containerColor, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth(0.8f)) {
+        Surface(
+            color = containerColor,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.widthIn(max = 300.dp)
+        ) {
             Text(message.text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
         }
     }

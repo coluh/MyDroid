@@ -1,8 +1,6 @@
 package com.destywen.mydroid.ui.screen.chat
 
 import android.util.Log
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -11,11 +9,9 @@ import com.destywen.mydroid.data.local.AgentSettings
 import com.destywen.mydroid.data.local.ChatAgent
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.Message
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
@@ -36,7 +32,6 @@ data class ChatScreenState(
 )
 
 class ChatViewModel(private val service: AiChatService, private val agentSettings: AgentSettings) : ViewModel() {
-    private val TAG: String = "colo"
     private val _agentsFlow = agentSettings.agentsFlow
     private val _selectedIdFlow = agentSettings.selectedAgentIdFlow
 
@@ -90,7 +85,6 @@ class ChatViewModel(private val service: AiChatService, private val agentSetting
             service.streamChat(apiMessage, agent)
                 .catch { e ->
                     _error.update { e.message }
-                    Log.d(TAG, "sendMessage: ${e.message}")
                     _isResponding.update { false }
                 }
                 .collect { token ->
@@ -107,6 +101,12 @@ class ChatViewModel(private val service: AiChatService, private val agentSetting
     fun selectAgent(id: String) {
         viewModelScope.launch {
             agentSettings.selectAgent(id)
+        }
+    }
+
+    fun deleteAgent(id: String) {
+        viewModelScope.launch {
+            agentSettings.saveAgents(state.value.allAgents.filter { it.id != id })
         }
     }
 

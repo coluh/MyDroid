@@ -12,6 +12,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.destywen.mydroid.R
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -27,7 +28,9 @@ fun HomeScreen(onNavigate: () -> Unit) {
             })
     }) { innerPadding ->
         Text(
-            text = "Android", modifier = Modifier.padding(innerPadding)
+            text = "Android", modifier = Modifier
+                .padding(innerPadding)
+                .padding(8.dp)
         )
     }
 }

@@ -105,7 +105,8 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
             TopAppBar(
                 title = {
                     if (isSearching) {
-                        TextField(value = searchQuery,
+                        TextField(
+                            value = searchQuery,
                             onValueChange = { searchQuery = it },
                             modifier = Modifier.fillMaxWidth(),
                             placeholder = { Text("搜索内容或评论...") })
@@ -193,7 +194,8 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
 
         if (showEditor) {
             ModalBottomSheet(onDismissRequest = { showEditor = false }) {
-                JournalEditorView(initialContent = activeJournal?.content ?: "",
+                JournalEditorView(
+                    initialContent = activeJournal?.content ?: "",
                     initialTags = activeJournal?.tags ?: emptyList(),
                     allTags = state.tags,
                     onCancel = { showEditor = false },
@@ -231,7 +233,8 @@ fun JournalItemCard(item: Journal, onClick: () -> Unit, onEdit: () -> Unit, onDe
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp)
-            .combinedClickable(interactionSource = remember { MutableInteractionSource() },
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
                 indication = LocalIndication.current,
                 onClick = onClick,
                 onLongClick = { showMenu = true })
@@ -369,7 +372,9 @@ fun CommentInputView(onSend: (String) -> Unit) {
             onValueChange = { content = it },
             modifier = Modifier.weight(1f),
             placeholder = { Text("添加评论...") })
-        IconButton(onClick = { onSend(content) }) {
+        IconButton(
+            enabled = content.isNotBlank(),
+            onClick = { onSend(content) }) {
             Icon(Icons.AutoMirrored.Default.Send, null)
         }
     }
