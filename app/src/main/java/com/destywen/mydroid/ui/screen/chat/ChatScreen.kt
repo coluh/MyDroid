@@ -1,6 +1,8 @@
 package com.destywen.mydroid.ui.screen.chat
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -22,30 +24,31 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.AppBarDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material.Button
+import androidx.compose.material.Card
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.ExposedDropdownMenuBox
+import androidx.compose.material.ExposedDropdownMenuDefaults
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.material.LocalTextStyle
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedTextField
+import androidx.compose.material.Scaffold
+import androidx.compose.material.SnackbarHost
+import androidx.compose.material.SnackbarHostState
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
+import androidx.compose.material.TextButton
+import androidx.compose.material.TextField
+import androidx.compose.material.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,7 +74,6 @@ import com.destywen.mydroid.ui.components.BottomModal
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -103,6 +105,7 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
+                windowInsets = AppBarDefaults.topAppBarWindowInsets,
                 title = { Text(stringResource(R.string.chat)) },
                 navigationIcon = {
                     IconButton(onClick = { onNavigate() }) {
@@ -125,36 +128,32 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                         }
                         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                             DropdownMenuItem(
-                                text = { Text("设置") },
                                 onClick = {
                                     menuExpanded = false
                                     scope.launch {
                                         snackbarHostState.showSnackbar("click settings")
                                     }
                                 }
-                            )
+                            ) { Text("设置") }
                             DropdownMenuItem(
-                                text = { Text("新建") },
                                 onClick = {
                                     menuExpanded = false
                                     editingAgentId = null
                                     showEditor = true
                                 }
-                            )
+                            ) { Text("新建") }
                             DropdownMenuItem(
-                                text = { Text("编辑") },
                                 onClick = {
                                     menuExpanded = false
                                     showList = true
                                 }
-                            )
+                            ) { Text("编辑") }
                             DropdownMenuItem(
-                                text = { Text("清空") },
                                 onClick = {
                                     menuExpanded = false
                                     state.selectedAgent?.let { viewModel.deleteHistory(it.id) }
                                 }
-                            )
+                            ) { Text("清空") }
                         }
                     }
                 }
@@ -295,7 +294,7 @@ fun UserInput(modifier: Modifier, text: String? = null, enabled: Boolean = true,
         text?.let { inputText = text }
     }
 
-    Surface(modifier = modifier, tonalElevation = 2.dp) {
+    Surface(modifier = modifier) {
         Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = inputText,
@@ -320,8 +319,8 @@ fun ChatBubble(message: ChatMessage) {
 
     val alignment = if (message.isUser) Alignment.End else Alignment.Start
     val containerColor = when {
-        message.isUser -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.secondaryContainer
+        message.isUser -> MaterialTheme.colors.primary
+        else -> MaterialTheme.colors.surface
     }
 
     Column(
@@ -333,7 +332,9 @@ fun ChatBubble(message: ChatMessage) {
         Surface(
             color = containerColor,
             shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.widthIn(max = 300.dp)
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .border(BorderStroke(1.dp, MaterialTheme.colors.onSurface), RoundedCornerShape(16.dp))
         ) {
             Text(message.text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
         }
@@ -355,7 +356,8 @@ fun AgentList(agents: List<ChatAgent>, onSelect: (ChatAgent) -> Unit) {
                     .fillMaxWidth()
                     .clickable(null, LocalIndication.current, onClick = {
                         onSelect(agent)
-                    })
+                    }),
+                elevation = 2.dp
             ) {
                 Column(
                     modifier = Modifier
@@ -390,14 +392,14 @@ fun AgentList(agents: List<ChatAgent>, onSelect: (ChatAgent) -> Unit) {
                         softWrap = false,
                         maxLines = 1,
                         lineHeight = 1.sp
-                    )
+                    ) // TODO: simplify these
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun <T> ModelSelector(
     modifier: Modifier = Modifier,
@@ -420,13 +422,8 @@ fun <T> ModelSelector(
             textStyle = LocalTextStyle.current.copy(fontWeight = FontWeight.Bold),
             label = label,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .menuAnchor(),
             colors = ExposedDropdownMenuDefaults.textFieldColors(
-                unfocusedContainerColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
+                backgroundColor = Color.Transparent
             ),
             singleLine = true
         )
@@ -434,12 +431,11 @@ fun <T> ModelSelector(
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { shouldExpand = false }) {
             options.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(toText(option)) },
                     onClick = {
                         shouldExpand = false
                         onSelect(option)
                     }
-                )
+                ) { Text(toText(option)) }
             }
         }
     }

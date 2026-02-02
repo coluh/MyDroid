@@ -98,8 +98,8 @@ class JournalViewModel(private val dao: JournalDao, private val journalSettings:
         dao.upsertJournal(JournalEntity(id = id, content = content, tag = tagString, time = createdTime))
     }
 
-    fun addComment(journalId: Int, content: String) = viewModelScope.launch {
-        dao.insertComment(CommentEntity(journalId = journalId, content = content))
+    fun addComment(journalId: Int, name: String, content: String) = viewModelScope.launch {
+        dao.insertComment(CommentEntity(journalId = journalId, name = name, content = content))
     }
 
     fun deleteJournal(id: Int) = viewModelScope.launch { dao.deleteJournal(id) }

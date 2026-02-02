@@ -13,14 +13,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.ExposedDropdownMenuBox
+import androidx.compose.material.ExposedDropdownMenuDefaults
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
+import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,7 +36,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 
 // TODO: optimize
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditableDropdown(
     modifier: Modifier = Modifier,
@@ -98,18 +97,17 @@ fun EditableDropdown(
         ) {
             filteredOptions.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(option) },
                     onClick = {
                         input = option
                         onValueChange(input)
                     }
-                )
+                ) { Text(option) }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun StringSelect(
     modifier: Modifier = Modifier,
@@ -131,28 +129,23 @@ fun StringSelect(
         TextField(
             value = selected ?: "",
             onValueChange = {},
-            modifier = Modifier.menuAnchor(),
             readOnly = true,
             singleLine = true,
             label = label,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             colors = ExposedDropdownMenuDefaults.textFieldColors(
-                unfocusedContainerColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
+                backgroundColor = Color.Transparent,
             )
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(option) },
                     onClick = {
                         selected = option
                         expanded = false
                         onValueChange(option)
                     }
-                )
+                ) { Text(option) }
             }
         }
     }

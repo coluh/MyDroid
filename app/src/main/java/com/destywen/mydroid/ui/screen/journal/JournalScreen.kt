@@ -12,12 +12,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.AppBarDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
@@ -26,29 +28,29 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material.Button
+import androidx.compose.material.Card
+import androidx.compose.material.Chip
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.FloatingActionButton
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.material.LocalTextStyle
+import androidx.compose.material.OutlinedTextField
+import androidx.compose.material.Scaffold
+import androidx.compose.material.ScaffoldDefaults
+import androidx.compose.material.SnackbarHost
+import androidx.compose.material.SnackbarHostState
+import androidx.compose.material.Text
+import androidx.compose.material.TextButton
+import androidx.compose.material.TextField
+import androidx.compose.material.TextFieldColors
+import androidx.compose.material.TextFieldDefaults
+import androidx.compose.material.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +59,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
@@ -68,10 +71,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.destywen.mydroid.R
+import com.destywen.mydroid.ui.components.BottomModal
 import com.destywen.mydroid.util.timestampToLocalDateTimeString
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -85,10 +89,10 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
 
     var menuExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
-    val datePickerState = rememberDatePickerState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() } // snackbar so ugly
+    val username = stringResource(R.string.username)
 
     val activeJournal = remember(activeJournalId, state.journals) {
         state.journals.find { it.id == activeJournalId }
@@ -103,17 +107,18 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
         }
     }
 
+    LaunchedEffect(state.journals.size) {
+        if (state.journals.isNotEmpty()) {
+            listState.animateScrollToItem(0)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
+                windowInsets = AppBarDefaults.topAppBarWindowInsets,
                 title = {
-                    if (isSearching) {
-                        TextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("搜索内容或评论...") })
-                    } else {
+                    if (!isSearching) {
                         Text(stringResource(R.string.journal))
                     }
                 },
@@ -123,6 +128,17 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                     }
                 },
                 actions = {
+                    if (isSearching) {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("搜索内容或评论...") },
+                            colors = TextFieldDefaults.textFieldColors(
+                                backgroundColor = Color.Transparent
+                            )
+                        )
+                    }
                     IconButton(onClick = { isSearching = !isSearching }) {
                         Icon(Icons.Default.Search, null)
                     }
@@ -130,28 +146,25 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                         Icon(Icons.Default.MoreVert, null)
                     }
                     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                        DropdownMenuItem(
-                            text = { Text("设置") },
-                            onClick = { scope.launch { snackbarHostState.showSnackbar("clicked 设置") } })
-                        DropdownMenuItem(
-                            text = { Text("跳转") },
-                            onClick = { showDatePicker = true; menuExpanded = false }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (showTagFilter) "收起" else "展开") },
-                            onClick = { showTagFilter = !showTagFilter; menuExpanded = false }
-                        )
+                        DropdownMenuItem(onClick = {
+                            scope.launch { snackbarHostState.showSnackbar("clicked 设置") }
+                        }) { Text("设置") }
+                        DropdownMenuItem(onClick = {
+                            showTagFilter = !showTagFilter; menuExpanded = false
+                        }) { Text(if (showTagFilter) "收起" else "展开") }
                     }
                 })
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    activeJournalId = null
-                    showEditor = true
-                }, modifier = Modifier.padding(24.dp)
-            ) {
-                Icon(Icons.Default.Add, null)
+            if (!showEditor && !showCommentSheet) {
+                FloatingActionButton(
+                    onClick = {
+                        activeJournalId = null
+                        showEditor = true
+                    }, modifier = Modifier.padding(24.dp)
+                ) {
+                    Icon(Icons.Default.Add, null)
+                }
             }
         },
         snackbarHost = {
@@ -173,16 +186,18 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                 ) {
                     state.tags.forEach { tag ->
                         val isSelected = tag in state.hideTags
-                        FilterChip(
-                            selected = isSelected, label = { Text(tag) }, onClick = {
+                        Chip(
+                            onClick = {
                                 if (isSelected) {
                                     viewModel.showTag(tag)
                                 } else {
                                     viewModel.hideTag(tag)
                                 }
-                            }, leadingIcon = if (isSelected) {
+                            },
+                            leadingIcon = if (isSelected) {
                                 { Icon(Icons.Filled.Lock, null) }
-                            } else null)
+                            } else null
+                        ) { Text(tag) }
                     }
                 }
             }
@@ -205,60 +220,55 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
             }
         }
 
-        if (showDatePicker) {
-            DatePickerDialog(
-                onDismissRequest = { showDatePicker = false },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showDatePicker = false
-                        menuExpanded = false
-                        datePickerState.selectedDateMillis?.let { targetTime ->
-                            val index = state.journals.indexOfFirst { it.timestamp <= targetTime }
-                            scope.launch {
-                                listState.animateScrollToItem(if (index >= 0) index else filteredJournals.size - 1)
-                            }
-                        }
-                    }) {
-                        Text("确认")
+        // TODO: use more convenient way to locate journal by time
+//        if (showDatePicker) {
+//            DatePickerDialog(
+//                onDismissRequest = { showDatePicker = false },
+//                confirmButton = {
+//                    TextButton(onClick = {
+//                        showDatePicker = false
+//                        menuExpanded = false
+//                        datePickerState.selectedDateMillis?.let { targetTime ->
+//                            val index = state.journals.indexOfFirst { it.timestamp <= targetTime }
+//                            scope.launch {
+//                                listState.animateScrollToItem(if (index >= 0) index else filteredJournals.size - 1)
+//                            }
+//                        }
+//                    }) {
+//                        Text("确认")
+//                    }
+//                }
+//            ) {
+//                DatePicker(state = datePickerState)
+//            }
+//        }
+
+        BottomModal(showEditor, Modifier.padding(contentPadding), { showEditor = false }) {
+            JournalEditorView(
+                initialContent = activeJournal?.content ?: "",
+                initialTags = activeJournal?.tags ?: emptyList(),
+                allTags = state.tags,
+                onCancel = { showEditor = false },
+                onSave = { content, tags ->
+                    showEditor = false
+                    if (activeJournalId == null) {
+                        viewModel.addJournal(content, tags)
+                    } else {
+                        viewModel.updateJournal(activeJournalId!!, content, tags)
                     }
-                }
-            ) {
-                DatePicker(state = datePickerState)
-            }
+                })
         }
 
-        if (showEditor) {
-            ModalBottomSheet(onDismissRequest = { showEditor = false }) {
-                JournalEditorView(
-                    initialContent = activeJournal?.content ?: "",
-                    initialTags = activeJournal?.tags ?: emptyList(),
-                    allTags = state.tags,
-                    onCancel = { showEditor = false },
-                    onSave = { content, tags ->
-                        showEditor = false
-                        if (activeJournalId == null) {
-                            viewModel.addJournal(content, tags)
-                        } else {
-                            viewModel.updateJournal(activeJournalId!!, content, tags)
-                        }
-                        scope.launch {
-                            listState.animateScrollToItem(0)
-                        }
-                    })
-            }
-        }
-
-        if (showCommentSheet) {
-            ModalBottomSheet(onDismissRequest = { showCommentSheet = false }) {
-                CommentInputView { text ->
-                    activeJournalId?.let { viewModel.addComment(it, text) }
-                    showCommentSheet = false
-                }
+        BottomModal(showCommentSheet, Modifier.padding(contentPadding), { showCommentSheet = false }) {
+            CommentInputView { text ->
+                activeJournalId?.let { viewModel.addComment(it, username, text) }
+                showCommentSheet = false
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun JournalItemCard(item: Journal, onClick: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
     val clipboard = LocalClipboard.current.nativeClipboard
@@ -272,7 +282,8 @@ fun JournalItemCard(item: Journal, onClick: () -> Unit, onEdit: () -> Unit, onDe
                 interactionSource = remember { MutableInteractionSource() },
                 indication = LocalIndication.current,
                 onClick = onClick,
-                onLongClick = { showMenu = true })
+                onLongClick = { showMenu = true }),
+        elevation = 2.dp
     ) {
         Column(Modifier.padding(8.dp)) {
             if (item.tags.isNotEmpty()) {
@@ -281,7 +292,7 @@ fun JournalItemCard(item: Journal, onClick: () -> Unit, onEdit: () -> Unit, onDe
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                 ) {
                     item.tags.filter { it.isNotBlank() }.forEach {
-                        SuggestionChip(onClick = {}, label = { Text(it) }, modifier = Modifier.height(32.dp))
+                        Chip(onClick = {}, modifier = Modifier.height(32.dp)) { Text(it) }
                     }
                 }
             }
@@ -294,23 +305,24 @@ fun JournalItemCard(item: Journal, onClick: () -> Unit, onEdit: () -> Unit, onDe
                     withStyle(style = SpanStyle(fontStyle = FontStyle.Italic, fontSize = 14.sp)) {
                         append(it.content)
                     }
-                }, lineHeight = 1.sp)
+                }, lineHeight = 20.sp)
             }
 
-            Text(timestampToLocalDateTimeString(item.timestamp), fontSize = 12.sp, lineHeight = 1.sp)
+            Text(timestampToLocalDateTimeString(item.timestamp), fontSize = 12.sp)
 
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                DropdownMenuItem(text = { Text("复制") }, onClick = {
+                DropdownMenuItem(onClick = {
                     showMenu = false
                     clipboard.setPrimaryClip(ClipData.newPlainText("content", item.content))
-                })
-                DropdownMenuItem(text = { Text("编辑") }, onClick = { showMenu = false; onEdit() })
-                DropdownMenuItem(text = { Text("删除") }, onClick = { showMenu = false; onDelete() })
+                }) { Text("复制") }
+                DropdownMenuItem(onClick = { showMenu = false; onEdit() }) { Text("编辑") }
+                DropdownMenuItem(onClick = { showMenu = false; onDelete() }) { Text("删除") }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun JournalEditorView(
     initialContent: String,
@@ -343,8 +355,7 @@ fun JournalEditorView(
         LazyRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(selectableTags) { tag ->
                 val isSelected = tag in selectedTags
-                FilterChip(
-                    selected = isSelected,
+                Chip(
                     onClick = {
                         selectedTags = if (isSelected) {
                             selectedTags.filter { it != tag }
@@ -352,14 +363,13 @@ fun JournalEditorView(
                             selectedTags + tag
                         }
                     },
-                    label = { Text(tag) },
                     leadingIcon = if (isSelected) {
                         {
                             Icon(Icons.Filled.Done, null)
                         }
                     } else {
                         null
-                    })
+                    }) { Text(tag) }
             }
             item {
                 IconButton(onClick = { showCreate = true }) {
@@ -377,6 +387,7 @@ fun JournalEditorView(
                 Button(onClick = {
                     showCreate = false
                     selectableTags = selectableTags + newTag
+                    selectedTags += newTag
                 }, enabled = newTag.isNotBlank()) {
                     Text("添加")
                 }
