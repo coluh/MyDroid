@@ -40,6 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.AgentSettings
 import com.destywen.mydroid.data.local.AppDatabase
+import com.destywen.mydroid.data.local.JournalSettings
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.NetworkModule
 import com.destywen.mydroid.ui.screen.chat.ChatScreen
@@ -60,7 +61,7 @@ enum class Screen(@StringRes val label: Int, val icon: ImageVector) {
 }
 
 @Composable
-fun MainApp(database: AppDatabase, agentSettings: AgentSettings) {
+fun MainApp(database: AppDatabase, agentSettings: AgentSettings, journalSettings: JournalSettings) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var currentScreen by rememberSaveable { mutableStateOf(Screen.HOME) }
@@ -106,7 +107,7 @@ fun MainApp(database: AppDatabase, agentSettings: AgentSettings) {
             Screen.HOME -> HomeScreen(onNavigate)
             Screen.JOURNAL -> {
                 val journalViewModel: JournalViewModel =
-                    viewModel(factory = JournalViewModel.Factory(database.journalDao()))
+                    viewModel(factory = JournalViewModel.Factory(database.journalDao(), journalSettings))
                 JournalScreen(journalViewModel, onNavigate)
             }
 

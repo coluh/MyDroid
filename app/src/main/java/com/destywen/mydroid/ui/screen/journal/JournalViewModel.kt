@@ -7,8 +7,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.destywen.mydroid.data.local.CommentEntity
 import com.destywen.mydroid.data.local.JournalDao
 import com.destywen.mydroid.data.local.JournalEntity
+import com.destywen.mydroid.data.local.JournalSettings
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -30,16 +32,18 @@ data class Journal(
 
 data class JournalScreenState(
     val journals: List<Journal> = emptyList(),
-    val tags: List<String> = emptyList()
+    val tags: List<String> = emptyList(),
+    val hideTags: List<String> = emptyList()
 )
 
-class JournalViewModel(private val dao: JournalDao) : ViewModel() {
+class JournalViewModel(private val dao: JournalDao, private val journalSettings: JournalSettings) : ViewModel() {
     private val journalsFlow = dao.getAllJournals()
     private val commentsFlow = dao.getAllComments()
+    private val hideTagsFlow = journalSettings.hideTags
 
     private val commentsByJournalId = commentsFlow.map { comments -> comments.groupBy { it.journalId } }
 
-    val state = combine(journalsFlow, commentsByJournalId) { journals, commentMap ->
+    val state = combine(journalsFlow, commentsByJournalId, hideTagsFlow) { journals, commentMap, hideTags ->
         JournalScreenState(
             journals = journals.map { j ->
                 Journal(
@@ -69,7 +73,8 @@ class JournalViewModel(private val dao: JournalDao) : ViewModel() {
                         }
                     }
                 }
-            }.toList()
+            }.toList(),
+            hideTags = hideTags?.split(",") ?: emptyList()
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JournalScreenState())
 
@@ -99,10 +104,22 @@ class JournalViewModel(private val dao: JournalDao) : ViewModel() {
 
     fun deleteJournal(id: Int) = viewModelScope.launch { dao.deleteJournal(id) }
 
+    fun hideTag(tag: String) = viewModelScope.launch {
+        val hidedTags = journalSettings.hideTags.first()?.split(",") ?: emptyList()
+        val newList = (hidedTags + listOf(tag)).distinct().joinToString(",")
+        journalSettings.updateHideTags(newList)
+    }
+
+    fun showTag(tag: String) = viewModelScope.launch {
+        val hidedTags = journalSettings.hideTags.first()?.split(",") ?: emptyList()
+        val newList = hidedTags.filter { it != tag }.joinToString(",")
+        journalSettings.updateHideTags(newList)
+    }
+
     companion object {
-        fun Factory(dao: JournalDao) = viewModelFactory {
+        fun Factory(dao: JournalDao, settings: JournalSettings) = viewModelFactory {
             initializer {
-                JournalViewModel(dao)
+                JournalViewModel(dao, settings)
             }
         }
     }

@@ -3,6 +3,7 @@ package com.destywen.mydroid.ui.screen.journal
 import android.content.ClipData
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,10 +17,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
@@ -40,7 +43,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -55,7 +57,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
@@ -65,7 +66,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.destywen.mydroid.R
 import com.destywen.mydroid.util.timestampToLocalDateTimeString
@@ -81,6 +81,7 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
     var activeJournalId by rememberSaveable { mutableStateOf<Int?>(null) }
     var isSearching by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
+    var showTagFilter by rememberSaveable { mutableStateOf(false) }
 
     var menuExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -92,11 +93,13 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
     val activeJournal = remember(activeJournalId, state.journals) {
         state.journals.find { it.id == activeJournalId }
     }
-    val filteredJournals = remember(state.journals, searchQuery) {
-        if (searchQuery.isBlank()) state.journals
+    val filteredJournals = remember(state.journals, searchQuery, state.hideTags) {
+        (if (searchQuery.isBlank()) state.journals
         else state.journals.filter { j ->
             j.content.contains(searchQuery, ignoreCase = true) ||
                     j.comments.any { it.content.contains(searchQuery, ignoreCase = true) }
+        }).filter { j ->
+            !j.tags.any { it in state.hideTags }
         }
     }
 
@@ -132,7 +135,11 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                             onClick = { scope.launch { snackbarHostState.showSnackbar("clicked 设置") } })
                         DropdownMenuItem(
                             text = { Text("跳转") },
-                            onClick = { showDatePicker = true }
+                            onClick = { showDatePicker = true; menuExpanded = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (showTagFilter) "收起" else "展开") },
+                            onClick = { showTagFilter = !showTagFilter; menuExpanded = false }
                         )
                     }
                 })
@@ -151,22 +158,50 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
             SnackbarHost(hostState = snackbarHostState)
         }
     ) { contentPadding ->
-        LazyColumn(
-            state = listState,
+        Column(
             modifier = Modifier
                 .padding(contentPadding)
                 .fillMaxSize()
         ) {
-            items(filteredJournals, key = { it.id }) { journal ->
-                JournalItemCard(journal, onClick = {
-                    activeJournalId = journal.id
-                    showCommentSheet = true
-                }, onEdit = {
-                    activeJournalId = journal.id
-                    showEditor = true
-                }, onDelete = {
-                    viewModel.deleteJournal(journal.id)
-                })
+            if (showTagFilter) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    state.tags.forEach { tag ->
+                        val isSelected = tag in state.hideTags
+                        FilterChip(
+                            selected = isSelected, label = { Text(tag) }, onClick = {
+                                if (isSelected) {
+                                    viewModel.showTag(tag)
+                                } else {
+                                    viewModel.hideTag(tag)
+                                }
+                            }, leadingIcon = if (isSelected) {
+                                { Icon(Icons.Filled.Lock, null) }
+                            } else null)
+                    }
+                }
+            }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+            ) {
+                items(filteredJournals, key = { it.id }) { journal ->
+                    JournalItemCard(journal, onClick = {
+                        activeJournalId = journal.id
+                        showCommentSheet = true
+                    }, onEdit = {
+                        activeJournalId = journal.id
+                        showEditor = true
+                    }, onDelete = {
+                        viewModel.deleteJournal(journal.id)
+                    })
+                }
             }
         }
 
