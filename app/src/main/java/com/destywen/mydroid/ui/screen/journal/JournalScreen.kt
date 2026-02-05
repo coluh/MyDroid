@@ -1,6 +1,10 @@
 package com.destywen.mydroid.ui.screen.journal
 
 import android.content.ClipData
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -101,7 +105,8 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
         (if (searchQuery.isBlank()) state.journals
         else state.journals.filter { j ->
             j.content.contains(searchQuery, ignoreCase = true) ||
-                    j.comments.any { it.content.contains(searchQuery, ignoreCase = true) }
+                    j.comments.any { it.content.contains(searchQuery, ignoreCase = true) } ||
+                    j.tags.any {it.contains(searchQuery, ignoreCase = true)}
         }).filter { j ->
             !j.tags.any { it in state.hideTags }
         }
@@ -176,7 +181,7 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                 .padding(contentPadding)
                 .fillMaxSize()
         ) {
-            if (showTagFilter) {
+            AnimatedVisibility(visible = showTagFilter, enter = slideInVertically(), exit = slideOutVertically()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -243,7 +248,7 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
 //            }
 //        }
 
-        BottomModal(showEditor, Modifier.padding(contentPadding), { showEditor = false }) {
+        BottomModal(showEditor, Modifier.padding(contentPadding), onDismissRequest = { showEditor = false }) {
             JournalEditorView(
                 initialContent = activeJournal?.content ?: "",
                 initialTags = activeJournal?.tags ?: emptyList(),
@@ -381,8 +386,7 @@ fun JournalEditorView(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextField(
                     newTag, onValueChange = { newTag = it }, modifier = Modifier
-                        .width(100.dp)
-                        .height(50.dp)
+                        .width(160.dp)
                 )
                 Button(onClick = {
                     showCreate = false

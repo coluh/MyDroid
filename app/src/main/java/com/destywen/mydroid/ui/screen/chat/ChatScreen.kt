@@ -1,5 +1,6 @@
 package com.destywen.mydroid.ui.screen.chat
 
+import android.content.ClipData
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.border
@@ -61,6 +62,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -96,10 +99,8 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
             viewModel.clearSnackbar()
         }
     }
-    LaunchedEffect(state.messages) {
-        if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.size)
-        }
+    LaunchedEffect(state.messages.size) {
+        listState.animateScrollToItem(0)
     }
 
     Scaffold(
@@ -171,13 +172,14 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
         ) {
             LazyColumn(
                 state = listState,
+                reverseLayout = true,
                 modifier = Modifier
                     .weight(1f)
                     .pointerInput(Unit) {
                         detectTapGestures(onTap = { focusManager.clearFocus() })
                     }
             ) {
-                items(state.messages) { msg ->
+                items(state.messages.asReversed(), key = { it.hashCode() }) { msg ->
                     ChatBubble(msg)
                 }
                 item {
@@ -322,6 +324,8 @@ fun ChatBubble(message: ChatMessage) {
         message.isUser -> MaterialTheme.colors.primary
         else -> MaterialTheme.colors.surface
     }
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -335,6 +339,11 @@ fun ChatBubble(message: ChatMessage) {
             modifier = Modifier
                 .widthIn(max = 300.dp)
                 .border(BorderStroke(1.dp, MaterialTheme.colors.onSurface), RoundedCornerShape(16.dp))
+                .clickable(null, LocalIndication.current) {
+                    scope.launch {
+                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("content", message.text)))
+                    }
+                }
         ) {
             Text(message.text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
         }

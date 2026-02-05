@@ -1,5 +1,6 @@
 package com.destywen.mydroid.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -158,6 +159,9 @@ fun BottomModal(
     onDismissRequest: () -> Unit,
     content: @Composable () -> Unit
 ) {
+    BackHandler() {
+        onDismissRequest()
+    }
     AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
         Box(
             modifier = modifier
