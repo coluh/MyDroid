@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,6 +27,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.AlertDialog
 import androidx.compose.material.AppBarDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -32,6 +35,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.Button
 import androidx.compose.material.Card
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.ExperimentalMaterialApi
@@ -85,6 +89,8 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
     var showList by rememberSaveable { mutableStateOf(false) }
     var editingAgentId by rememberSaveable { mutableStateOf<String?>(null) }
     val editingAgent = state.allAgents.find { it.id == editingAgentId }
+    var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
+    var deletingMessage by remember { mutableStateOf<ChatMessage?>(null) }
 
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -179,17 +185,43 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                         detectTapGestures(onTap = { focusManager.clearFocus() })
                     }
             ) {
-                items(state.messages.asReversed(), key = { it.hashCode() }) { msg ->
-                    ChatBubble(msg)
+                items(state.messages.asReversed(), key = { it.hashCode() }) { message ->
+                    ChatBubble(message, onDelete = {
+                        deletingMessage = it
+                        showDeleteConfirm = true
+                    })
                 }
                 item {
                     Spacer(modifier = Modifier.height(0.dp))
                 }
             }
 
-            UserInput(modifier = Modifier.fillMaxWidth(), state.userInput, !state.isResponding) {
+            UserInput(modifier = Modifier.fillMaxWidth(), state.userInput, state.isResponding) {
                 viewModel.sendMessage(it)
             }
+        }
+
+        BottomModal(
+            visible = showDeleteConfirm,
+            modifier = Modifier.padding(contentPadding),
+            onDismissRequest = {
+                deletingMessage = null
+                showDeleteConfirm = false
+            }
+        ) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirm = false },
+                confirmButton = {
+                    Button(onClick = {
+                        showDeleteConfirm = false
+                        val idx = state.messages.indexOfFirst { it.id == deletingMessage!!.id }
+                        val idx2 = if (deletingMessage!!.isUser) idx + 1 else idx - 1
+                        viewModel.deleteMessageById(state.messages[idx].id)
+                        viewModel.deleteMessageById(state.messages[idx2].id)
+                    }) { Text("确认") }
+                },
+                text = { Text("确认删除这轮对话吗？") }
+            )
         }
 
         BottomModal(
@@ -289,7 +321,7 @@ fun AgentEditor(
 }
 
 @Composable
-fun UserInput(modifier: Modifier, text: String? = null, enabled: Boolean = true, onSend: (content: String) -> Unit) {
+fun UserInput(modifier: Modifier, text: String? = null, responding: Boolean = true, onSend: (content: String) -> Unit) {
     var inputText by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(text) {
@@ -305,19 +337,27 @@ fun UserInput(modifier: Modifier, text: String? = null, enabled: Boolean = true,
                 maxLines = 4
             )
             IconButton(
-                enabled = enabled && inputText.isNotBlank(),
+                enabled = !responding && inputText.isNotBlank(),
                 onClick = {
                     onSend(inputText)
                     inputText = ""
                 }) {
-                Icon(Icons.AutoMirrored.Filled.Send, null)
+                if (!responding) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null)
+                } else {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colors.primary
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage) {
+fun ChatBubble(message: ChatMessage, onDelete: (msg: ChatMessage) -> Unit) {
 
     val alignment = if (message.isUser) Alignment.End else Alignment.Start
     val containerColor = when {
@@ -330,7 +370,10 @@ fun ChatBubble(message: ChatMessage) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
+            .padding(8.dp)
+            .combinedClickable(null, LocalIndication.current, onLongClick = {
+                onDelete(message)
+            }, onClick = {}),
         horizontalAlignment = alignment
     ) {
         Surface(

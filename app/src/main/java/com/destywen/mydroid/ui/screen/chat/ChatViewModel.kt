@@ -25,7 +25,8 @@ import kotlinx.coroutines.launch
 
 data class ChatMessage(
     val text: String,
-    val isUser: Boolean
+    val isUser: Boolean,
+    val id: Long = 0
 )
 
 data class ChatScreenState(
@@ -64,7 +65,7 @@ class ChatViewModel(
     ) { (db, gen, agents), (id, resp, err), input ->
         val activeAgent = agents.find { it.id == id } ?: agents.firstOrNull()
         ChatScreenState(
-            messages = db.map { ChatMessage(it.content, it.role == "user") } + gen,
+            messages = db.map { ChatMessage( it.content, it.role == "user", it.id) } + gen,
             allAgents = agents,
             selectedAgent = activeAgent,
             isResponding = resp,
@@ -127,6 +128,12 @@ class ChatViewModel(
     fun deleteHistory(agentId: String) {
         viewModelScope.launch {
             chatDao.clearHistory(agentId)
+        }
+    }
+
+    fun deleteMessageById(messageId: Long) {
+        viewModelScope.launch {
+            chatDao.deleteMessageById(messageId)
         }
     }
 
