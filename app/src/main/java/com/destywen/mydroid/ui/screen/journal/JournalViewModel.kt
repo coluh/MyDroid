@@ -4,10 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.CommentEntity
 import com.destywen.mydroid.data.local.JournalDao
 import com.destywen.mydroid.data.local.JournalEntity
-import com.destywen.mydroid.data.local.JournalSettings
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -36,10 +36,10 @@ data class JournalScreenState(
     val hideTags: List<String> = emptyList()
 )
 
-class JournalViewModel(private val dao: JournalDao, private val journalSettings: JournalSettings) : ViewModel() {
+class JournalViewModel(private val dao: JournalDao, private val settings: AppSettings) : ViewModel() {
     private val journalsFlow = dao.getAllJournals()
     private val commentsFlow = dao.getAllComments()
-    private val hideTagsFlow = journalSettings.hideTags
+    private val hideTagsFlow = settings.hideTagsFlow
 
     private val commentsByJournalId = commentsFlow.map { comments -> comments.groupBy { it.journalId } }
 
@@ -105,19 +105,19 @@ class JournalViewModel(private val dao: JournalDao, private val journalSettings:
     fun deleteJournal(id: Int) = viewModelScope.launch { dao.deleteJournal(id) }
 
     fun hideTag(tag: String) = viewModelScope.launch {
-        val hidedTags = journalSettings.hideTags.first()?.split(",") ?: emptyList()
+        val hidedTags = settings.hideTagsFlow.first()?.split(",") ?: emptyList()
         val newList = (hidedTags + listOf(tag)).distinct().joinToString(",")
-        journalSettings.updateHideTags(newList)
+        settings.updateHideTags(newList)
     }
 
     fun showTag(tag: String) = viewModelScope.launch {
-        val hidedTags = journalSettings.hideTags.first()?.split(",") ?: emptyList()
+        val hidedTags = settings.hideTagsFlow.first()?.split(",") ?: emptyList()
         val newList = hidedTags.filter { it != tag }.joinToString(",")
-        journalSettings.updateHideTags(newList)
+        settings.updateHideTags(newList)
     }
 
     companion object {
-        fun Factory(dao: JournalDao, settings: JournalSettings) = viewModelFactory {
+        fun Factory(dao: JournalDao, settings: AppSettings) = viewModelFactory {
             initializer {
                 JournalViewModel(dao, settings)
             }

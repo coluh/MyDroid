@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.destywen.mydroid.data.local.AgentSettings
+import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.ChatAgent
 import com.destywen.mydroid.data.local.ChatDao
 import com.destywen.mydroid.data.local.ChatMessageEntity
@@ -41,10 +41,10 @@ data class ChatScreenState(
 class ChatViewModel(
     private val service: AiChatService,
     private val chatDao: ChatDao,
-    private val agentSettings: AgentSettings
+    private val settings: AppSettings
 ) : ViewModel() {
-    private val _agentsFlow = agentSettings.agentsFlow
-    private val _selectedId = agentSettings.selectedAgentIdFlow
+    private val _agentsFlow = settings.agentsFlow
+    private val _selectedId = settings.selectedAgentIdFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -139,20 +139,20 @@ class ChatViewModel(
 
     fun selectAgent(id: String) {
         viewModelScope.launch {
-            agentSettings.selectAgent(id)
+            settings.selectAgent(id)
         }
     }
 
     fun deleteAgent(id: String) {
         viewModelScope.launch {
-            agentSettings.saveAgents(state.value.allAgents.filter { it.id != id })
+            settings.updateAgents(state.value.allAgents.filter { it.id != id })
         }
     }
 
     fun saveAgent(agent: ChatAgent) {
         viewModelScope.launch {
             val newList = state.value.allAgents.filter { it.id != agent.id } + agent
-            agentSettings.saveAgents(newList)
+            settings.updateAgents(newList)
         }
     }
 
@@ -161,7 +161,7 @@ class ChatViewModel(
     }
 
     companion object {
-        fun Factory(service: AiChatService, dao: ChatDao, settings: AgentSettings) = viewModelFactory {
+        fun Factory(service: AiChatService, dao: ChatDao, settings: AppSettings) = viewModelFactory {
             initializer {
                 ChatViewModel(service, dao, settings)
             }

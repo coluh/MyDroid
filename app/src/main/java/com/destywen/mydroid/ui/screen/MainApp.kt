@@ -8,15 +8,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.AppBarDefaults
 import androidx.compose.material.Divider
 import androidx.compose.material.DrawerValue
 import androidx.compose.material.ExperimentalMaterialApi
@@ -47,9 +43,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.destywen.mydroid.R
-import com.destywen.mydroid.data.local.AgentSettings
 import com.destywen.mydroid.data.local.AppDatabase
-import com.destywen.mydroid.data.local.JournalSettings
+import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.NetworkModule
 import com.destywen.mydroid.ui.screen.chat.ChatScreen
@@ -71,7 +66,7 @@ enum class Screen(val label: Int, val icon: ImageVector) {
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun MainApp(database: AppDatabase, agentSettings: AgentSettings, journalSettings: JournalSettings) {
+fun MainApp(database: AppDatabase, settings: AppSettings) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var currentScreen by rememberSaveable { mutableStateOf(Screen.HOME) }
@@ -124,7 +119,7 @@ fun MainApp(database: AppDatabase, agentSettings: AgentSettings, journalSettings
         when (currentScreen) {
             Screen.JOURNAL -> {
                 val journalViewModel: JournalViewModel =
-                    viewModel(factory = JournalViewModel.Factory(database.journalDao(), journalSettings))
+                    viewModel(factory = JournalViewModel.Factory(database.journalDao(), settings))
                 JournalScreen(journalViewModel) { scope.launch { drawerState.open() } }
             }
 
@@ -134,7 +129,7 @@ fun MainApp(database: AppDatabase, agentSettings: AgentSettings, journalSettings
                         factory = ChatViewModel.Factory(
                             AiChatService(NetworkModule.client),
                             database.chatDao(),
-                            agentSettings
+                            settings
                         )
                     )
                 ChatScreen(viewModel) { scope.launch { drawerState.open() } }
