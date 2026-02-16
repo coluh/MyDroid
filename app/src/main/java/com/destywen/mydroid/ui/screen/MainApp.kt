@@ -52,6 +52,8 @@ import com.destywen.mydroid.ui.screen.chat.ChatViewModel
 import com.destywen.mydroid.ui.screen.home.HomeScreen
 import com.destywen.mydroid.ui.screen.journal.JournalScreen
 import com.destywen.mydroid.ui.screen.journal.JournalViewModel
+import com.destywen.mydroid.ui.screen.log.LogScreen
+import com.destywen.mydroid.ui.screen.log.LogViewModel
 import kotlinx.coroutines.launch
 
 enum class Screen(val label: Int, val icon: ImageVector) {
@@ -61,7 +63,7 @@ enum class Screen(val label: Int, val icon: ImageVector) {
     CHAT(R.string.chat, Icons.Default.Person),
     GAMES(R.string.games, Icons.Default.Star),
     SETTINGS(R.string.settings, Icons.Default.Settings),
-    INFO(R.string.info, Icons.Default.Info)
+    LOG(R.string.log, Icons.Default.Info),
 }
 
 @OptIn(ExperimentalMaterialApi::class)
@@ -133,6 +135,11 @@ fun MainApp(database: AppDatabase, settings: AppSettings) {
                         )
                     )
                 ChatScreen(viewModel) { scope.launch { drawerState.open() } }
+            }
+
+            Screen.LOG -> {
+                val viewModel: LogViewModel = viewModel(factory = LogViewModel.Factory(database.logDao()))
+                LogScreen(viewModel) { scope.launch { drawerState.open() } }
             }
 
             else -> HomeScreen() { scope.launch { drawerState.open() } }

@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.destywen.mydroid.R
+import com.destywen.mydroid.data.local.AppLogger
 import com.destywen.mydroid.ui.components.BottomModal
 import com.destywen.mydroid.util.timestampToLocalDateTimeString
 import kotlinx.coroutines.launch
@@ -116,6 +117,10 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
         if (state.journals.isNotEmpty()) {
             listState.animateScrollToItem(0)
         }
+    }
+
+    LaunchedEffect(filteredJournals.size) {
+        AppLogger.i("JournalScreen", "过滤得到${filteredJournals.size}条记录")
     }
 
     Scaffold(

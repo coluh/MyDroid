@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.destywen.mydroid.data.local.AppLogger
 import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.ChatAgent
 import com.destywen.mydroid.data.local.ChatDao
@@ -108,6 +109,7 @@ class ChatViewModel(
                     _generatingMessage.update { emptyList() }
                     _isResponding.update { false }
                     _error.update { e.message }
+                    AppLogger.e("streamChat", "流式请求出错了: ${e.message}")
                 }
                 .collect { token ->
                     fullResponse += token

@@ -1,5 +1,6 @@
 package com.destywen.mydroid.data.remote
 
+import com.destywen.mydroid.data.local.AppLogger
 import com.destywen.mydroid.data.local.ChatAgent
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -61,7 +62,8 @@ class AiChatService(private val client: HttpClient) {
                         if (delta != null) {
                             send(delta)
                         }
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        AppLogger.e("streamChat", "解析出错了: ${e.message}")
                     }
                 }
             }
