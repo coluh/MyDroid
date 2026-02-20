@@ -167,7 +167,7 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                 })
         },
         floatingActionButton = {
-            if (!showEditor && !showCommentSheet) {
+            if (!showEditor && !showCommentSheet && !showAgentSelector) {
                 FloatingActionButton(
                     onClick = {
                         activeJournalId = null
