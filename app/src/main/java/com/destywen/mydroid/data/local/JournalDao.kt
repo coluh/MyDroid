@@ -14,7 +14,8 @@ import kotlinx.coroutines.flow.Flow
 data class JournalEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val content: String,
-    val tag: String = "",
+    val image: String? = null, // filename in image directory
+    val tag: String = "", // tags separated by comma
     val time: Long = System.currentTimeMillis()
 )
 
@@ -31,7 +32,7 @@ data class JournalEntity(
 data class CommentEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val journalId: Int,
-    val name: String = "system",
+    val name: String = "system", // agent id
     val content: String,
     val time: Long = System.currentTimeMillis()
 )
@@ -44,8 +45,11 @@ interface JournalDao {
     @Query("SELECT * FROM comments")
     fun getAllComments(): Flow<List<CommentEntity>>
 
-    @Upsert suspend fun upsertJournal(journal: JournalEntity)
-    @Insert suspend fun insertComment(comment: CommentEntity)
+    @Upsert
+    suspend fun upsertJournal(journal: JournalEntity)
+
+    @Insert
+    suspend fun insertComment(comment: CommentEntity)
 
     @Query("DELETE FROM journals WHERE id = :id")
     suspend fun deleteJournal(id: Int)

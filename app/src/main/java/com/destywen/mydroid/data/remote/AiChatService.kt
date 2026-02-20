@@ -1,6 +1,6 @@
 package com.destywen.mydroid.data.remote
 
-import com.destywen.mydroid.data.local.AppLogger
+import com.destywen.mydroid.domain.AppLogger
 import com.destywen.mydroid.data.local.ChatAgent
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -50,7 +50,6 @@ class AiChatService(private val client: HttpClient) {
     // TODO: use Result instead of try catch
     suspend fun chat(history: List<Message>, config: ChatAgent): String = withContext(Dispatchers.IO) {
         val prompt = listOf(Message("system", config.systemPrompt)) + history
-        AppLogger.d("chat", "prompt: ${prompt}")
         try {
             val rawResponse = client.post(config.endpoint) {
                 header("Authorization", "Bearer ${config.apiKey}")

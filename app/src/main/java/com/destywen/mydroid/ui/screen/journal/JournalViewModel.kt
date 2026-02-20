@@ -1,10 +1,12 @@
 package com.destywen.mydroid.ui.screen.journal
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.destywen.mydroid.data.local.AppLogger
+import com.destywen.mydroid.AppContainer
+import com.destywen.mydroid.domain.AppLogger
 import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.ChatAgent
 import com.destywen.mydroid.data.local.CommentEntity
@@ -12,6 +14,7 @@ import com.destywen.mydroid.data.local.JournalDao
 import com.destywen.mydroid.data.local.JournalEntity
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.Message
+import com.destywen.mydroid.domain.FileManager
 import com.destywen.mydroid.util.timestampToLocalDateTime
 import com.destywen.mydroid.util.timestampToLocalDateTimeString
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,6 +35,7 @@ data class Journal(
     val id: Int,
     val content: String,
     val tags: List<String>,
+    val image: String?,
     val comments: List<Comment>,
     val timestamp: Long
 )
@@ -46,6 +50,7 @@ data class JournalScreenState(
 
 class JournalViewModel(
     private val dao: JournalDao,
+    private val manager: FileManager,
     private val service: AiChatService,
     private val settings: AppSettings
 ) : ViewModel() {
@@ -74,6 +79,7 @@ class JournalViewModel(
                     } else {
                         emptyList()
                     },
+                    image = j.image,
                     comments = commentMap[j.id].orEmpty().map { c ->
                         Comment(
                             id = c.id,
@@ -100,31 +106,44 @@ class JournalViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JournalScreenState())
 
-    fun addJournal(content: String, tags: List<String>) = viewModelScope.launch {
+    fun addJournal(content: String, tags: List<String>, uri: Uri?) = viewModelScope.launch {
         val tagString = tags.asSequence()
             .flatMap { it.split(",") }
             .map { it.trim() }.filter { it.isNotEmpty() }
             .distinct()
             .joinToString(",")
-        dao.upsertJournal(JournalEntity(content = content, tag = tagString))
+        // save image if need
+        val imageName = uri?.let {
+            manager.saveImage(uri)
+        }
+        dao.upsertJournal(JournalEntity(content = content, tag = tagString, image = imageName))
     }
 
     fun updateJournal(id: Int, content: String, tags: List<String>) = viewModelScope.launch {
-        // keep time
+        val origin = journalsFlow.first().first { it.id == id }
+
         val tagString = tags.asSequence()
             .flatMap { it.split(",") }
             .map { it.trim() }.filter { it.isNotEmpty() }
             .distinct()
             .joinToString(",")
-        val createdTime = state.value.journals.first { it.id == id }.timestamp
-        dao.upsertJournal(JournalEntity(id = id, content = content, tag = tagString, time = createdTime))
+        dao.upsertJournal(
+            origin.copy(
+                content = content,
+                tag = tagString,
+            )
+        )
     }
 
     fun addComment(journalId: Int, name: String, content: String) = viewModelScope.launch {
         dao.insertComment(CommentEntity(journalId = journalId, name = name, content = content))
     }
 
-    fun deleteJournal(id: Int) = viewModelScope.launch { dao.deleteJournal(id) }
+    fun deleteJournal(id: Int) = viewModelScope.launch {
+        val origin = journalsFlow.first().first { it.id == id }
+        origin.image?.let { manager.deleteImage(origin.image) }
+        dao.deleteJournal(id)
+    }
 
     fun hideTag(tag: String) = viewModelScope.launch {
         val hidedTags = settings.hideTagsFlow.first()?.split(",") ?: emptyList()
@@ -187,9 +206,9 @@ class JournalViewModel(
     }
 
     companion object {
-        fun Factory(dao: JournalDao, service: AiChatService, settings: AppSettings) = viewModelFactory {
+        fun Factory(container: AppContainer) = viewModelFactory {
             initializer {
-                JournalViewModel(dao, service, settings)
+                JournalViewModel(container.journalDao, container.fileManager, container.chatService, container.settings)
             }
         }
     }

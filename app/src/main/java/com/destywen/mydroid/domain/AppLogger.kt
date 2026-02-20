@@ -1,6 +1,9 @@
-package com.destywen.mydroid.data.local
+package com.destywen.mydroid.domain
 
 import android.util.Log
+import com.destywen.mydroid.data.local.LogDao
+import com.destywen.mydroid.data.local.LogEntity
+import com.destywen.mydroid.data.local.LogLevel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

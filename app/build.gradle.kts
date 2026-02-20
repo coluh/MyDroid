@@ -10,11 +10,13 @@ plugins {
 
 android {
     namespace = "com.destywen.mydroid"
+    //noinspection GradleDependency
     compileSdk = 35
 
     defaultConfig {
         applicationId = "com.destywen.mydroid"
         minSdk = 29
+        //noinspection OldTargetApi
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -68,6 +70,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material)
     implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.exifinterface)
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.ktx)
     implementation(libs.ktor.client.core)
@@ -75,6 +78,7 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.client.logging)
+    implementation(libs.coil.compose)
     implementation(libs.androidx.datastore.preferences)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

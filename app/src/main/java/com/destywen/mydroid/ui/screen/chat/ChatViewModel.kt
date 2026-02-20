@@ -4,7 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.destywen.mydroid.data.local.AppLogger
+import com.destywen.mydroid.AppContainer
+import com.destywen.mydroid.domain.AppLogger
 import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.ChatAgent
 import com.destywen.mydroid.data.local.ChatDao
@@ -163,9 +164,9 @@ class ChatViewModel(
     }
 
     companion object {
-        fun Factory(service: AiChatService, dao: ChatDao, settings: AppSettings) = viewModelFactory {
+        fun Factory(container: AppContainer) = viewModelFactory {
             initializer {
-                ChatViewModel(service, dao, settings)
+                ChatViewModel(container.chatService, container.chatDao, container.settings)
             }
         }
     }

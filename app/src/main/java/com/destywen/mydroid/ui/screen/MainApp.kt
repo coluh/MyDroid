@@ -42,11 +42,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.destywen.mydroid.AppContainer
 import com.destywen.mydroid.R
-import com.destywen.mydroid.data.local.AppDatabase
-import com.destywen.mydroid.data.local.AppSettings
-import com.destywen.mydroid.data.remote.AiChatService
-import com.destywen.mydroid.data.remote.NetworkModule
 import com.destywen.mydroid.ui.screen.chat.ChatScreen
 import com.destywen.mydroid.ui.screen.chat.ChatViewModel
 import com.destywen.mydroid.ui.screen.home.HomeScreen
@@ -68,7 +65,7 @@ enum class Screen(val label: Int, val icon: ImageVector) {
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun MainApp(database: AppDatabase, settings: AppSettings) {
+fun MainApp(container: AppContainer) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var currentScreen by rememberSaveable { mutableStateOf(Screen.HOME) }
@@ -120,26 +117,17 @@ fun MainApp(database: AppDatabase, settings: AppSettings) {
     ) {
         when (currentScreen) {
             Screen.JOURNAL -> {
-                val journalViewModel: JournalViewModel =
-                    viewModel(factory = JournalViewModel.Factory(database.journalDao(), AiChatService(NetworkModule.client), settings))
+                val journalViewModel: JournalViewModel = viewModel(factory = JournalViewModel.Factory(container))
                 JournalScreen(journalViewModel) { scope.launch { drawerState.open() } }
-                // TODO: use Hilt
             }
 
             Screen.CHAT -> {
-                val viewModel: ChatViewModel =
-                    viewModel(
-                        factory = ChatViewModel.Factory(
-                            AiChatService(NetworkModule.client),
-                            database.chatDao(),
-                            settings
-                        )
-                    )
+                val viewModel: ChatViewModel = viewModel(factory = ChatViewModel.Factory(container))
                 ChatScreen(viewModel) { scope.launch { drawerState.open() } }
             }
 
             Screen.LOG -> {
-                val viewModel: LogViewModel = viewModel(factory = LogViewModel.Factory(database.logDao()))
+                val viewModel: LogViewModel = viewModel(factory = LogViewModel.Factory(container))
                 LogScreen(viewModel) { scope.launch { drawerState.open() } }
             }
 

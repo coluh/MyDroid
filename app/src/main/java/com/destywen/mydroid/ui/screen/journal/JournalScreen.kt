@@ -1,6 +1,9 @@
 package com.destywen.mydroid.ui.screen.journal
 
 import android.content.ClipData
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.slideInVertically
@@ -17,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -47,6 +51,7 @@ import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
@@ -64,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -73,11 +79,13 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import com.destywen.mydroid.R
-import com.destywen.mydroid.data.local.AppLogger
+import com.destywen.mydroid.domain.AppLogger
 import com.destywen.mydroid.ui.components.AgentCard
 import com.destywen.mydroid.ui.components.BottomModal
 import com.destywen.mydroid.util.timestampToLocalDateTimeString
+import java.io.File
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -93,9 +101,9 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
     var showAgentSelector by rememberSaveable { mutableStateOf(false) }
 
     var menuExpanded by remember { mutableStateOf(false) }
-    var showDatePicker by remember { mutableStateOf(false) }
+//    var showDatePicker by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
+//    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() } // snackbar so ugly
     val username = stringResource(R.string.username)
 
@@ -263,10 +271,10 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                 initialTags = activeJournal?.tags ?: emptyList(),
                 allTags = state.tags,
                 onCancel = { showEditor = false },
-                onSave = { content, tags ->
+                onSave = { content, tags, uri ->
                     showEditor = false
                     if (activeJournalId == null) {
-                        viewModel.addJournal(content, tags)
+                        viewModel.addJournal(content, tags, uri)
                     } else {
                         viewModel.updateJournal(activeJournalId!!, content, tags)
                     }
@@ -329,6 +337,8 @@ fun JournalItemCard(
     onGenerate: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
+    val imgDir = remember(context) { File(context.filesDir, "img") }
     val clipboard = LocalClipboard.current.nativeClipboard
     var showMenu by remember { mutableStateOf(false) }
 
@@ -355,6 +365,13 @@ fun JournalItemCard(
                 }
             }
             Text(item.content)
+            item.image?.let {
+                AsyncImage(
+                    model = File(imgDir, item.image),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             item.comments.forEach {
                 Text(buildAnnotatedString {
                     withStyle(style = SpanStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp)) {
@@ -388,13 +405,18 @@ fun JournalEditorView(
     initialTags: List<String>,
     allTags: List<String>,
     onCancel: () -> Unit,
-    onSave: (content: String, tags: List<String>) -> Unit
+    onSave: (content: String, tags: List<String>, imageUri: Uri?) -> Unit
 ) {
     var content by rememberSaveable { mutableStateOf(initialContent) }
     var selectableTags by rememberSaveable { mutableStateOf(allTags) }
     var selectedTags by rememberSaveable { mutableStateOf(initialTags) }
     var showCreate by rememberSaveable { mutableStateOf(false) }
     var newTag by rememberSaveable { mutableStateOf("") }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+
+    val launcher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri: Uri? ->
+        selectedImageUri = uri
+    }
 
     val isValid = content.isNotBlank()
 
@@ -451,12 +473,27 @@ fun JournalEditorView(
                 }
             }
         }
+        // image select and preview
+        if (initialContent == "") {
+            if (selectedImageUri == null) {
+                Row {
+                    IconButton(onClick = { launcher.launch("image/*") }) {
+                        Icon(Icons.Default.Add, null)
+                    }
+                }
+            } else {
+                Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(model = selectedImageUri, contentDescription = null, modifier = Modifier.size(80.dp))
+                    IconButton(onClick = { selectedImageUri = null }) { Icon(Icons.Default.Delete, null) }
+                }
+            }
+        }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = { onCancel() }) { Text("取消") }
             Button(onClick = {
                 if (isValid) {
-                    onSave(content, selectedTags)
+                    onSave(content, selectedTags, selectedImageUri)
                 }
             }, enabled = isValid) { Text("保存") }
         }
