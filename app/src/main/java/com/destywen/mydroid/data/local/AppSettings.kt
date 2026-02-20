@@ -26,6 +26,7 @@ class AppSettings(private val context: Context) {
     private object Keys {
         // journal page
         val HIDE_TAGS = stringPreferencesKey("hide_tags")
+        val JOURNAL_AGENT_ID = stringPreferencesKey("journal_agent_id")
 
         // chat page
         val AGENTS_JSON = stringPreferencesKey("agents_json")
@@ -33,6 +34,7 @@ class AppSettings(private val context: Context) {
     }
 
     val hideTagsFlow = context.dataStore.data.map { it[Keys.HIDE_TAGS] }
+    val journalAgentIdFlow = context.dataStore.data.map { it[Keys.JOURNAL_AGENT_ID] }
     val agentsFlow = context.dataStore.data.map { prefs ->
         prefs[Keys.AGENTS_JSON]?.let {
             runCatching {
@@ -44,6 +46,10 @@ class AppSettings(private val context: Context) {
 
     suspend fun updateHideTags(tags: String) {
         context.dataStore.edit { it[Keys.HIDE_TAGS] = tags }
+    }
+
+    suspend fun updateJournalAgentId(id: String) {
+        context.dataStore.edit { it[Keys.JOURNAL_AGENT_ID] = id }
     }
 
     suspend fun updateAgents(list: List<ChatAgent>) {

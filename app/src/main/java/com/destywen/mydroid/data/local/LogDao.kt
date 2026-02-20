@@ -25,4 +25,7 @@ interface LogDao {
 
     @Query("SELECT * FROM app_logs ORDER BY timestamp DESC LIMIT :limit")
     fun getRecentLogs(limit: Int = 1000): Flow<List<LogEntity>>
+
+    @Query("DELETE FROM app_logs WHERE level = 'DEBUG'")
+    suspend fun deleteDebugLog()
 }

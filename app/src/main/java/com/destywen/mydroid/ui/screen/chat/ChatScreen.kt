@@ -29,12 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.AppBarDefaults
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.Button
-import androidx.compose.material.Card
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
@@ -54,6 +49,10 @@ import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.TextField
 import androidx.compose.material.TopAppBar
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,12 +70,11 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.ChatAgent
+import com.destywen.mydroid.ui.components.AgentCard
 import com.destywen.mydroid.ui.components.BottomModal
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -107,6 +105,11 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
     }
     LaunchedEffect(state.messages.size) {
         listState.animateScrollToItem(0)
+    }
+    LaunchedEffect(state.allAgents.size) {
+        if (state.allAgents.size == 1) {
+            viewModel.selectAgent(state.allAgents[0].id)
+        }
     }
 
     Scaffold(
@@ -403,50 +406,7 @@ fun AgentList(agents: List<ChatAgent>, onSelect: (ChatAgent) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         agents.forEach { agent ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(null, LocalIndication.current, onClick = {
-                        onSelect(agent)
-                    }),
-                elevation = 2.dp
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-
-                        Text(agent.name, fontWeight = FontWeight.Bold, lineHeight = 1.sp)
-                        Text(
-                            agent.modelName,
-                            fontSize = 14.sp,
-                            lineHeight = 1.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                    }
-                    Text(
-                        agent.systemPrompt,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        softWrap = false,
-                        lineHeight = 1.sp,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        agent.endpoint,
-                        fontSize = 12.sp,
-                        softWrap = false,
-                        maxLines = 1,
-                        lineHeight = 1.sp
-                    ) // TODO: simplify these
-                }
-            }
+            AgentCard(agent) { onSelect(agent) }
         }
     }
 }

@@ -51,7 +51,7 @@ data class StreamDelta(
 
 @Serializable
 data class TokenUsage(
-    val promptTokens: Int,
-    val completionTokens: Int,
-    val totalTokens: Int
+    val prompt_tokens: Int,
+    val completion_tokens: Int,
+    val total_tokens: Int
 )

@@ -121,8 +121,9 @@ fun MainApp(database: AppDatabase, settings: AppSettings) {
         when (currentScreen) {
             Screen.JOURNAL -> {
                 val journalViewModel: JournalViewModel =
-                    viewModel(factory = JournalViewModel.Factory(database.journalDao(), settings))
+                    viewModel(factory = JournalViewModel.Factory(database.journalDao(), AiChatService(NetworkModule.client), settings))
                 JournalScreen(journalViewModel) { scope.launch { drawerState.open() } }
+                // TODO: use Hilt
             }
 
             Screen.CHAT -> {

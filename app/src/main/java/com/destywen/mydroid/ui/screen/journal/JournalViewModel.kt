@@ -4,10 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.destywen.mydroid.data.local.AppLogger
 import com.destywen.mydroid.data.local.AppSettings
+import com.destywen.mydroid.data.local.ChatAgent
 import com.destywen.mydroid.data.local.CommentEntity
 import com.destywen.mydroid.data.local.JournalDao
 import com.destywen.mydroid.data.local.JournalEntity
+import com.destywen.mydroid.data.remote.AiChatService
+import com.destywen.mydroid.data.remote.Message
+import com.destywen.mydroid.util.timestampToLocalDateTime
+import com.destywen.mydroid.util.timestampToLocalDateTimeString
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -33,17 +39,31 @@ data class Journal(
 data class JournalScreenState(
     val journals: List<Journal> = emptyList(),
     val tags: List<String> = emptyList(),
-    val hideTags: List<String> = emptyList()
+    val hideTags: List<String> = emptyList(),
+    val allAgents: List<ChatAgent> = emptyList(),
+    val replyAgent: ChatAgent? = null,
 )
 
-class JournalViewModel(private val dao: JournalDao, private val settings: AppSettings) : ViewModel() {
+class JournalViewModel(
+    private val dao: JournalDao,
+    private val service: AiChatService,
+    private val settings: AppSettings
+) : ViewModel() {
     private val journalsFlow = dao.getAllJournals()
     private val commentsFlow = dao.getAllComments()
     private val hideTagsFlow = settings.hideTagsFlow
+    private val agentsFlow = settings.agentsFlow
+    private val replyAgentId = settings.journalAgentIdFlow
 
     private val commentsByJournalId = commentsFlow.map { comments -> comments.groupBy { it.journalId } }
 
-    val state = combine(journalsFlow, commentsByJournalId, hideTagsFlow) { journals, commentMap, hideTags ->
+    val state = combine(
+        journalsFlow,
+        commentsByJournalId,
+        hideTagsFlow,
+        agentsFlow,
+        replyAgentId
+    ) { journals, commentMap, hideTags, allAgents, replyAgentId ->
         JournalScreenState(
             journals = journals.map { j ->
                 Journal(
@@ -74,7 +94,9 @@ class JournalViewModel(private val dao: JournalDao, private val settings: AppSet
                     }
                 }
             }.toList(),
-            hideTags = hideTags?.split(",") ?: emptyList()
+            hideTags = hideTags?.split(",") ?: emptyList(),
+            allAgents = allAgents,
+            replyAgent = allAgents.find { it.id == replyAgentId }
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JournalScreenState())
 
@@ -116,10 +138,58 @@ class JournalViewModel(private val dao: JournalDao, private val settings: AppSet
         settings.updateHideTags(newList)
     }
 
+    fun selectReplyAgent(id: String) = viewModelScope.launch {
+        settings.updateJournalAgentId(id)
+    }
+
+    fun generateReply(id: Int) = viewModelScope.launch {
+        if (state.value.replyAgent == null) {
+            AppLogger.i("JournalViewModel.generateReply", "agent not set")
+            return@launch
+        }
+
+        val all = state.value.journals.filter { j ->
+            !j.tags.any { it in state.value.hideTags }
+        }
+        val target = all.first { it.id == id }
+        val messagesReversed = mutableListOf<String>()
+
+        fun timedContent(j: Journal): String = buildString {
+            appendLine("[" + timestampToLocalDateTimeString(j.timestamp) + "]")
+            appendLine(j.content)
+            j.comments.filter { it.name == "Destywen" }.forEach { appendLine(it.content) }
+        }
+
+        val month = timestampToLocalDateTime(target.timestamp).monthValue
+        for (j in all.subList(all.indexOf(target) + 1, all.size)) {
+            if (timestampToLocalDateTime(j.timestamp).monthValue != month) {
+                break
+            }
+
+            messagesReversed.add(timedContent(j))
+        }
+
+        val messages = messagesReversed.reversed().joinToString("\n")
+        val user = buildString {
+            appendLine("## 历史随笔：")
+            appendLine("\n" + messages)
+            appendLine("## 最新随笔")
+            appendLine("\n" + timedContent(target))
+        }
+
+        val history = listOf(Message("user", user))
+
+        try {
+            val result = service.chat(history, state.value.replyAgent!!)
+            addComment(id, state.value.replyAgent!!.name, result)
+        } catch (_: Exception) {
+        }
+    }
+
     companion object {
-        fun Factory(dao: JournalDao, settings: AppSettings) = viewModelFactory {
+        fun Factory(dao: JournalDao, service: AiChatService, settings: AppSettings) = viewModelFactory {
             initializer {
-                JournalViewModel(dao, settings)
+                JournalViewModel(dao, service, settings)
             }
         }
     }

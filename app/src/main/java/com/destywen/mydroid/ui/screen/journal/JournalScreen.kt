@@ -2,10 +2,11 @@ package com.destywen.mydroid.ui.screen.journal
 
 import android.content.ClipData
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideIn
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -24,6 +24,26 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.AppBarDefaults
+import androidx.compose.material.Button
+import androidx.compose.material.Card
+import androidx.compose.material.Chip
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.ExposedDropdownMenuBox
+import androidx.compose.material.ExposedDropdownMenuDefaults
+import androidx.compose.material.FloatingActionButton
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.material.OutlinedTextField
+import androidx.compose.material.Scaffold
+import androidx.compose.material.SnackbarHost
+import androidx.compose.material.SnackbarHostState
+import androidx.compose.material.Text
+import androidx.compose.material.TextButton
+import androidx.compose.material.TextField
+import androidx.compose.material.TextFieldDefaults
+import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
@@ -32,27 +52,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.Button
-import androidx.compose.material.Card
-import androidx.compose.material.Chip
-import androidx.compose.material.DropdownMenu
-import androidx.compose.material.DropdownMenuItem
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.FloatingActionButton
-import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
-import androidx.compose.material.LocalTextStyle
-import androidx.compose.material.OutlinedTextField
-import androidx.compose.material.Scaffold
-import androidx.compose.material.ScaffoldDefaults
-import androidx.compose.material.SnackbarHost
-import androidx.compose.material.SnackbarHostState
-import androidx.compose.material.Text
-import androidx.compose.material.TextButton
-import androidx.compose.material.TextField
-import androidx.compose.material.TextFieldColors
-import androidx.compose.material.TextFieldDefaults
-import androidx.compose.material.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,9 +75,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.AppLogger
+import com.destywen.mydroid.ui.components.AgentCard
 import com.destywen.mydroid.ui.components.BottomModal
 import com.destywen.mydroid.util.timestampToLocalDateTimeString
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -91,6 +90,7 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
     var isSearching by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showTagFilter by rememberSaveable { mutableStateOf(false) }
+    var showAgentSelector by rememberSaveable { mutableStateOf(false) }
 
     var menuExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -107,7 +107,7 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
         else state.journals.filter { j ->
             j.content.contains(searchQuery, ignoreCase = true) ||
                     j.comments.any { it.content.contains(searchQuery, ignoreCase = true) } ||
-                    j.tags.any {it.contains(searchQuery, ignoreCase = true)}
+                    j.tags.any { it.contains(searchQuery, ignoreCase = true) }
         }).filter { j ->
             !j.tags.any { it in state.hideTags }
         }
@@ -157,7 +157,8 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                     }
                     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                         DropdownMenuItem(onClick = {
-                            scope.launch { snackbarHostState.showSnackbar("clicked 设置") }
+                            showAgentSelector = true
+                            menuExpanded = false
                         }) { Text("设置") }
                         DropdownMenuItem(onClick = {
                             showTagFilter = !showTagFilter; menuExpanded = false
@@ -214,6 +215,7 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
+                    .animateContentSize()
                     .fillMaxSize()
             ) {
                 items(filteredJournals, key = { it.id }) { journal ->
@@ -223,6 +225,8 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                     }, onEdit = {
                         activeJournalId = journal.id
                         showEditor = true
+                    }, onGenerate = {
+                        viewModel.generateReply(journal.id)
                     }, onDelete = {
                         viewModel.deleteJournal(journal.id)
                     })
@@ -275,12 +279,56 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                 showCommentSheet = false
             }
         }
+
+        BottomModal(showAgentSelector, Modifier.padding(contentPadding), { showAgentSelector = false }) {
+            var expanded by remember { mutableStateOf(false) }
+            val selected = state.replyAgent
+            ExposedDropdownMenuBox(
+                expanded = expanded, onExpandedChange = { expanded = it }, modifier = Modifier
+                    .padding(8.dp)
+                    .fillMaxWidth()
+            ) {
+                TextField(
+                    value = "${selected?.name} - ${selected?.modelName}",
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    singleLine = true,
+                    modifier = Modifier.clickable(null, LocalIndication.current) {
+                        expanded = true
+                    }
+                )
+                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    state.allAgents.forEach { agent ->
+                        DropdownMenuItem(
+                            onClick = {
+                                expanded = false
+                                viewModel.selectReplyAgent(agent.id)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            AgentCard(agent) {
+                                viewModel.selectReplyAgent(agent.id)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun JournalItemCard(item: Journal, onClick: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
+fun JournalItemCard(
+    item: Journal,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onGenerate: () -> Unit,
+    onDelete: () -> Unit
+) {
     val clipboard = LocalClipboard.current.nativeClipboard
     var showMenu by remember { mutableStateOf(false) }
 
@@ -326,6 +374,7 @@ fun JournalItemCard(item: Journal, onClick: () -> Unit, onEdit: () -> Unit, onDe
                     clipboard.setPrimaryClip(ClipData.newPlainText("content", item.content))
                 }) { Text("复制") }
                 DropdownMenuItem(onClick = { showMenu = false; onEdit() }) { Text("编辑") }
+                DropdownMenuItem(onClick = { showMenu = false; onGenerate() }) { Text("生成") }
                 DropdownMenuItem(onClick = { showMenu = false; onDelete() }) { Text("删除") }
             }
         }

@@ -34,6 +34,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.destywen.mydroid.R
+import com.destywen.mydroid.data.local.AppLogger
 import com.destywen.mydroid.data.local.LogDao
 import com.destywen.mydroid.data.local.LogEntity
 import com.destywen.mydroid.data.local.LogLevel
@@ -41,10 +42,16 @@ import com.destywen.mydroid.util.timestampToLocalDateTimeString
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 class LogViewModel(private val logDao: LogDao) : ViewModel() {
     val logs: StateFlow<List<LogEntity>> =
         logDao.getRecentLogs().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun deleteDebugLog() = viewModelScope.launch {
+        logDao.deleteDebugLog()
+        AppLogger.i("LogViewModel", "clear debug log")
+    }
 
     companion object {
         fun Factory(dao: LogDao) = viewModelFactory {
@@ -105,7 +112,12 @@ fun LogItem(log: LogEntity) {
                 style = MaterialTheme.typography.caption
             )
             Spacer(Modifier.width(8.dp))
-            Text(text = log.level, color = color, style = MaterialTheme.typography.caption, fontWeight = FontWeight.Bold)
+            Text(
+                text = log.level,
+                color = color,
+                style = MaterialTheme.typography.caption,
+                fontWeight = FontWeight.Bold
+            )
             Spacer(Modifier.width(8.dp))
             Text(text = "[${log.tag}]", style = MaterialTheme.typography.caption)
         }
