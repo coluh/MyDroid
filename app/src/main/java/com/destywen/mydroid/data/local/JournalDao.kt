@@ -53,4 +53,10 @@ interface JournalDao {
 
     @Query("DELETE FROM journals WHERE id = :id")
     suspend fun deleteJournal(id: Int)
+
+    @Query("DELETE FROM comments WHERE id = :id")
+    suspend fun deleteComment(id: Int)
+
+    @Query("DELETE FROM comments WHERE journalId = :id")
+    suspend fun deleteCommentsOfJournal(id: Int)
 }

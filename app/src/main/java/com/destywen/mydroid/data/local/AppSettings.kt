@@ -13,11 +13,13 @@ import java.util.UUID
 data class ChatAgent(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
-    val endpoint: String = "",
-    val apiKey: String = "",
-    val modelName: String = "",
-    val systemPrompt: String = ""
-)
+    val endpoint: String,
+    val apiKey: String,
+    val modelName: String,
+    val systemPrompt: String
+) {
+    fun display() = "$name-${modelName.take(3)}"
+}
 
 private val Context.dataStore by preferencesDataStore(name = "app_settings")
 

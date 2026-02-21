@@ -17,11 +17,13 @@ import com.destywen.mydroid.data.remote.Message
 import com.destywen.mydroid.domain.FileManager
 import com.destywen.mydroid.util.timestampToLocalDateTime
 import com.destywen.mydroid.util.timestampToLocalDateTimeString
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class Comment(
@@ -46,6 +48,7 @@ data class JournalScreenState(
     val hideTags: List<String> = emptyList(),
     val allAgents: List<ChatAgent> = emptyList(),
     val replyAgent: ChatAgent? = null,
+    val status: String? = null,
 )
 
 class JournalViewModel(
@@ -59,16 +62,16 @@ class JournalViewModel(
     private val hideTagsFlow = settings.hideTagsFlow
     private val agentsFlow = settings.agentsFlow
     private val replyAgentId = settings.journalAgentIdFlow
+    private val _status = MutableStateFlow<String?>(null)
 
     private val commentsByJournalId = commentsFlow.map { comments -> comments.groupBy { it.journalId } }
 
     val state = combine(
-        journalsFlow,
-        commentsByJournalId,
-        hideTagsFlow,
-        agentsFlow,
-        replyAgentId
-    ) { journals, commentMap, hideTags, allAgents, replyAgentId ->
+        combine(journalsFlow, commentsByJournalId) { a, b -> Pair(a, b) },
+        combine(hideTagsFlow, agentsFlow, replyAgentId) { a, b, c -> Triple(a, b, c) },
+        _status
+    ) { (journals, commentMap), (hideTagsString, allAgents, replyAgentId), status ->
+        val hideTags = hideTagsString?.split(",") ?: emptyList()
         JournalScreenState(
             journals = journals.map { j ->
                 Journal(
@@ -90,6 +93,8 @@ class JournalViewModel(
                     },
                     timestamp = j.time
                 )
+            }.filter { j->
+                !j.tags.any { it in hideTags }
             },
             tags = buildSet {
                 journals.forEach { j ->
@@ -100,11 +105,16 @@ class JournalViewModel(
                     }
                 }
             }.toList(),
-            hideTags = hideTags?.split(",") ?: emptyList(),
+            hideTags = hideTags,
             allAgents = allAgents,
-            replyAgent = allAgents.find { it.id == replyAgentId }
+            replyAgent = allAgents.find { it.id == replyAgentId },
+            status = status,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JournalScreenState())
+
+    fun clearStatus() = viewModelScope.launch {
+        _status.update { null }
+    }
 
     fun addJournal(content: String, tags: List<String>, uri: Uri?) = viewModelScope.launch {
         val tagString = tags.asSequence()
@@ -139,9 +149,14 @@ class JournalViewModel(
         dao.insertComment(CommentEntity(journalId = journalId, name = name, content = content))
     }
 
+    fun deleteComment(commentId: Int) = viewModelScope.launch {
+        dao.deleteComment(commentId)
+    }
+
     fun deleteJournal(id: Int) = viewModelScope.launch {
         val origin = journalsFlow.first().first { it.id == id }
         origin.image?.let { manager.deleteImage(origin.image) }
+        dao.deleteCommentsOfJournal(id)
         dao.deleteJournal(id)
     }
 
@@ -166,6 +181,7 @@ class JournalViewModel(
             AppLogger.i("JournalViewModel.generateReply", "agent not set")
             return@launch
         }
+        _status.update { "正在构建上下文..." }
 
         val all = state.value.journals.filter { j ->
             !j.tags.any { it in state.value.hideTags }
@@ -198,10 +214,13 @@ class JournalViewModel(
 
         val history = listOf(Message("user", user))
 
+        _status.update { "等待模型响应..." }
         try {
             val result = service.chat(history, state.value.replyAgent!!)
             addComment(id, state.value.replyAgent!!.name, result)
-        } catch (_: Exception) {
+            _status.update { null }
+        } catch (e: Exception) {
+            _status.update { "响应失败：${e.message}" }
         }
     }
 

@@ -99,7 +99,6 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
     LaunchedEffect(state.error) {
         state.error?.let {
             snackbarHostState.showSnackbar(it)
-            delay(2000)
             viewModel.clearSnackbar()
         }
     }
@@ -206,7 +205,6 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
 
         BottomModal(
             visible = showDeleteConfirm,
-            modifier = Modifier.padding(contentPadding),
             onDismissRequest = {
                 deletingMessage = null
                 showDeleteConfirm = false
@@ -229,7 +227,6 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
 
         BottomModal(
             visible = showList,
-            modifier = Modifier.padding(contentPadding),
             onDismissRequest = { showList = false }
         ) {
             AgentList(state.allAgents) { agent ->
@@ -241,7 +238,6 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
 
         BottomModal(
             visible = showEditor,
-            modifier = Modifier.padding(contentPadding),
             onDismissRequest = { showEditor = false }
         ) {
             AgentEditor(

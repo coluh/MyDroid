@@ -10,10 +10,14 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.material.Card
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.ExperimentalMaterialApi
@@ -35,6 +39,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 // TODO: optimize
 @Composable
@@ -155,34 +161,37 @@ fun StringSelect(
 @Composable
 fun BottomModal(
     visible: Boolean,
-    modifier: Modifier = Modifier,
     onDismissRequest: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    BackHandler() {
-        onDismissRequest()
-    }
-    AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
-        Box(
-            modifier = modifier
-                .imePadding()
-                .fillMaxSize()
-                .animateEnterExit(enter = fadeIn(), exit = fadeOut())
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable(interactionSource = null, indication = LocalIndication.current) {
-                    onDismissRequest()
-                }) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .animateEnterExit(
-                        enter = slideInVertically(initialOffsetY = { it }),
-                        exit = slideOutVertically(targetOffsetY = { it })
-                    )
-                    .clickable(null, LocalIndication.current, onClick = {})
-            ) {
-                content()
+    if (visible) {
+        Dialog(
+            onDismissRequest = onDismissRequest,
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                            onDismissRequest()
+                        }
+                )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                        .imePadding()
+                ) {
+                    content()
+                }
+            }
+
+            BackHandler() {
+                onDismissRequest()
             }
         }
     }

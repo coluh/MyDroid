@@ -2,19 +2,25 @@ package com.destywen.mydroid.ui.screen.journal
 
 import android.content.ClipData
 import android.net.Uri
+import android.os.Parcelable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +34,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.AppBarDefaults
+import androidx.compose.material.BottomSheetScaffold
 import androidx.compose.material.Button
 import androidx.compose.material.Card
 import androidx.compose.material.Chip
@@ -39,6 +46,7 @@ import androidx.compose.material.ExposedDropdownMenuDefaults
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Scaffold
 import androidx.compose.material.SnackbarHost
@@ -57,12 +65,12 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -78,108 +86,99 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.destywen.mydroid.R
-import com.destywen.mydroid.domain.AppLogger
+import com.destywen.mydroid.data.local.ChatAgent
 import com.destywen.mydroid.ui.components.AgentCard
 import com.destywen.mydroid.ui.components.BottomModal
 import com.destywen.mydroid.util.timestampToLocalDateTimeString
+import kotlinx.parcelize.Parcelize
 import java.io.File
+
+@Parcelize
+sealed class JournalModal : Parcelable {
+    object None : JournalModal()
+    object Setting : JournalModal()
+    data class Editor(val id: Int, val content: String, val tags: List<String>) : JournalModal()
+    data class Comment(val journalId: Int) : JournalModal()
+}
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-
-    var showEditor by rememberSaveable { mutableStateOf(false) }
-    var showCommentSheet by rememberSaveable { mutableStateOf(false) }
-    var activeJournalId by rememberSaveable { mutableStateOf<Int?>(null) }
-    var isSearching by rememberSaveable { mutableStateOf(false) }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    var showTagFilter by rememberSaveable { mutableStateOf(false) }
-    var showAgentSelector by rememberSaveable { mutableStateOf(false) }
-
-    var menuExpanded by remember { mutableStateOf(false) }
-//    var showDatePicker by remember { mutableStateOf(false) }
+    var activeModal by rememberSaveable { mutableStateOf<JournalModal>(JournalModal.None) }
+    var query by rememberSaveable { mutableStateOf<String?>(null) }
+    var showHideTags by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
-//    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() } // snackbar so ugly
+    val snackbarHostState = remember { SnackbarHostState() }
     val username = stringResource(R.string.username)
 
-    val activeJournal = remember(activeJournalId, state.journals) {
-        state.journals.find { it.id == activeJournalId }
-    }
-    val filteredJournals = remember(state.journals, searchQuery, state.hideTags) {
-        (if (searchQuery.isBlank()) state.journals
-        else state.journals.filter { j ->
-            j.content.contains(searchQuery, ignoreCase = true) ||
-                    j.comments.any { it.content.contains(searchQuery, ignoreCase = true) } ||
-                    j.tags.any { it.contains(searchQuery, ignoreCase = true) }
-        }).filter { j ->
-            !j.tags.any { it in state.hideTags }
+    val filteredJournals = remember(state.journals, query) {
+        if (query.isNullOrBlank()) {
+            state.journals
+        } else {
+            state.journals.filter { j ->
+                j.content.contains(query!!, ignoreCase = true) ||
+                        j.comments.any { it.content.contains(query!!, ignoreCase = true) } ||
+                        j.tags.any { it.contains(query!!, ignoreCase = true) }
+            }
         }
     }
 
+    var shouldScroll by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.journals.size) {
-        if (state.journals.isNotEmpty()) {
+        if (state.journals.isNotEmpty() && shouldScroll) {
             listState.animateScrollToItem(0)
+            shouldScroll = false
         }
     }
 
-    LaunchedEffect(filteredJournals.size) {
-        AppLogger.i("JournalScreen", "过滤得到${filteredJournals.size}条记录")
+    LaunchedEffect(state.status) {
+        state.status?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearStatus()
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 windowInsets = AppBarDefaults.topAppBarWindowInsets,
-                title = {
-                    if (!isSearching) {
-                        Text(stringResource(R.string.journal))
-                    }
-                },
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = { onNavigate() }) {
                         Icon(Icons.Default.Menu, null)
                     }
                 },
                 actions = {
-                    if (isSearching) {
-                        TextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("搜索内容或评论...") },
-                            colors = TextFieldDefaults.textFieldColors(
-                                backgroundColor = Color.Transparent
-                            )
-                        )
-                    }
-                    IconButton(onClick = { isSearching = !isSearching }) {
+                    var expanded by remember { mutableStateOf(false) }
+                    IconButton(onClick = { query = if (query == null) "" else null }) {
                         Icon(Icons.Default.Search, null)
                     }
-                    IconButton(onClick = { menuExpanded = true }) {
+                    IconButton(onClick = { expanded = true }) {
                         Icon(Icons.Default.MoreVert, null)
                     }
-                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         DropdownMenuItem(onClick = {
-                            showAgentSelector = true
-                            menuExpanded = false
+                            activeModal = JournalModal.Setting
+                            expanded = false
                         }) { Text("设置") }
                         DropdownMenuItem(onClick = {
-                            showTagFilter = !showTagFilter; menuExpanded = false
-                        }) { Text(if (showTagFilter) "收起" else "展开") }
+                            showHideTags = !showHideTags
+                            expanded = false
+                        }) { Text(if (showHideTags) "收起" else "展开") }
                     }
                 })
         },
         floatingActionButton = {
-            if (!showEditor && !showCommentSheet && !showAgentSelector) {
+            if (activeModal == JournalModal.None) {
                 FloatingActionButton(
                     onClick = {
-                        activeJournalId = null
-                        showEditor = true
+                        activeModal = JournalModal.Editor(0, "", emptyList())
+                        shouldScroll = true
                     }, modifier = Modifier.padding(24.dp)
                 ) {
                     Icon(Icons.Default.Add, null)
@@ -195,7 +194,22 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                 .padding(contentPadding)
                 .fillMaxSize()
         ) {
-            AnimatedVisibility(visible = showTagFilter, enter = slideInVertically(), exit = slideOutVertically()) {
+            AnimatedVisibility(
+                visible = query != null,
+                enter = slideInHorizontally() + expandVertically(),
+                exit = slideOutHorizontally() + shrinkVertically(),
+            ) {
+                TextField(
+                    value = query ?: "",
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("搜索任何文本...") },
+                    colors = TextFieldDefaults.textFieldColors(
+                        backgroundColor = Color.Transparent
+                    )
+                )
+            }
+            AnimatedVisibility(visible = showHideTags) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -227,119 +241,73 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                     .fillMaxSize()
             ) {
                 items(filteredJournals, key = { it.id }) { journal ->
-                    JournalItemCard(journal, onClick = {
-                        activeJournalId = journal.id
-                        showCommentSheet = true
-                    }, onEdit = {
-                        activeJournalId = journal.id
-                        showEditor = true
+                    JournalItemCard(journal, onEdit = {
+                        activeModal = JournalModal.Editor(journal.id, journal.content, journal.tags)
                     }, onGenerate = {
                         viewModel.generateReply(journal.id)
                     }, onDelete = {
                         viewModel.deleteJournal(journal.id)
+                    }, onComment = {
+                        activeModal = JournalModal.Comment(journal.id)
+                    }, onDeleteComment = {
+                        viewModel.deleteComment(it)
                     })
                 }
             }
         }
 
-        // TODO: use more convenient way to locate journal by time
-//        if (showDatePicker) {
-//            DatePickerDialog(
-//                onDismissRequest = { showDatePicker = false },
-//                confirmButton = {
-//                    TextButton(onClick = {
-//                        showDatePicker = false
-//                        menuExpanded = false
-//                        datePickerState.selectedDateMillis?.let { targetTime ->
-//                            val index = state.journals.indexOfFirst { it.timestamp <= targetTime }
-//                            scope.launch {
-//                                listState.animateScrollToItem(if (index >= 0) index else filteredJournals.size - 1)
-//                            }
-//                        }
-//                    }) {
-//                        Text("确认")
-//                    }
-//                }
-//            ) {
-//                DatePicker(state = datePickerState)
-//            }
-//        }
 
-        BottomModal(showEditor, Modifier.padding(contentPadding), onDismissRequest = { showEditor = false }) {
-            JournalEditorView(
-                initialContent = activeJournal?.content ?: "",
-                initialTags = activeJournal?.tags ?: emptyList(),
-                allTags = state.tags,
-                onCancel = { showEditor = false },
-                onSave = { content, tags, uri ->
-                    showEditor = false
-                    if (activeJournalId == null) {
-                        viewModel.addJournal(content, tags, uri)
-                    } else {
-                        viewModel.updateJournal(activeJournalId!!, content, tags)
-                    }
-                })
-        }
-
-        BottomModal(showCommentSheet, Modifier.padding(contentPadding), { showCommentSheet = false }) {
-            CommentInputView { text ->
-                activeJournalId?.let { viewModel.addComment(it, username, text) }
-                showCommentSheet = false
-            }
-        }
-
-        BottomModal(showAgentSelector, Modifier.padding(contentPadding), { showAgentSelector = false }) {
-            var expanded by remember { mutableStateOf(false) }
-            val selected = state.replyAgent
-            ExposedDropdownMenuBox(
-                expanded = expanded, onExpandedChange = { expanded = it }, modifier = Modifier
-                    .padding(8.dp)
-                    .fillMaxWidth()
-            ) {
-                TextField(
-                    value = "${selected?.name} - ${selected?.modelName}",
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    singleLine = true,
-                    modifier = Modifier.clickable(null, LocalIndication.current) {
-                        expanded = true
-                    }
-                )
-                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    state.allAgents.forEach { agent ->
-                        DropdownMenuItem(
-                            onClick = {
-                                expanded = false
-                                viewModel.selectReplyAgent(agent.id)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                        ) {
-                            AgentCard(agent) {
-                                viewModel.selectReplyAgent(agent.id)
-                            }
+        BottomModal(
+            visible = activeModal != JournalModal.None,
+            onDismissRequest = { activeModal = JournalModal.None }
+        ) {
+            when (val modal = activeModal) {
+                is JournalModal.Editor -> JournalEditor(
+                    initialContent = modal.content,
+                    initialTags = modal.tags,
+                    allTags = state.tags,
+                    onCancel = { activeModal = JournalModal.None },
+                    onSave = { content, tags, uri ->
+                        if (modal.id == 0) {
+                            viewModel.addJournal(content, tags, uri)
+                        } else {
+                            viewModel.updateJournal(modal.id, content, tags)
                         }
-                    }
-                }
+                        activeModal = JournalModal.None
+                    })
+
+                is JournalModal.Comment -> JournalComment(onSend = { text ->
+                    viewModel.addComment(modal.journalId, username, text)
+                    activeModal = JournalModal.None
+                })
+
+                is JournalModal.Setting -> JournalSetting(state.replyAgent, state.allAgents, onSelect = {
+                    viewModel.selectReplyAgent(it)
+                })
+
+                else -> {}
             }
         }
     }
 }
 
+
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun JournalItemCard(
     item: Journal,
-    onClick: () -> Unit,
     onEdit: () -> Unit,
     onGenerate: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onComment: () -> Unit,
+    onDeleteComment: (commentId: Int) -> Unit,
 ) {
     val context = LocalContext.current
     val imgDir = remember(context) { File(context.filesDir, "img") }
     val clipboard = LocalClipboard.current.nativeClipboard
+    val copyText = { text: String ->
+        clipboard.setPrimaryClip(ClipData.newPlainText("复制的文本", text))
+    }
     var showMenu by remember { mutableStateOf(false) }
 
     Card(
@@ -349,7 +317,7 @@ fun JournalItemCard(
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = LocalIndication.current,
-                onClick = onClick,
+                onClick = onComment,
                 onLongClick = { showMenu = true }),
         elevation = 2.dp
     ) {
@@ -373,23 +341,33 @@ fun JournalItemCard(
                 )
             }
             item.comments.forEach {
-                Text(buildAnnotatedString {
-                    withStyle(style = SpanStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp)) {
-                        append(it.name + ": ")
+                Box {
+                    var expanded by remember { mutableStateOf(false) }
+                    Text(
+                        buildAnnotatedString {
+                            withStyle(style = SpanStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp)) {
+                                append(it.name + ": ")
+                            }
+                            withStyle(style = SpanStyle(fontStyle = FontStyle.Italic, fontSize = 14.sp)) {
+                                append(it.content)
+                            }
+                        }, lineHeight = 20.sp, modifier = Modifier.combinedClickable(
+                            interactionSource = null,
+                            indication = LocalIndication.current,
+                            onClick = {},
+                            onLongClick = { expanded = true }
+                        ))
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        DropdownMenuItem(onClick = { expanded = false; copyText(it.content) }) { Text("复制") }
+                        DropdownMenuItem(onClick = { expanded = false; onDeleteComment(it.id) }) { Text("删除") }
                     }
-                    withStyle(style = SpanStyle(fontStyle = FontStyle.Italic, fontSize = 14.sp)) {
-                        append(it.content)
-                    }
-                }, lineHeight = 20.sp)
+                }
             }
 
             Text(timestampToLocalDateTimeString(item.timestamp), fontSize = 12.sp)
 
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                DropdownMenuItem(onClick = {
-                    showMenu = false
-                    clipboard.setPrimaryClip(ClipData.newPlainText("content", item.content))
-                }) { Text("复制") }
+                DropdownMenuItem(onClick = { showMenu = false; copyText(item.content) }) { Text("复制") }
                 DropdownMenuItem(onClick = { showMenu = false; onEdit() }) { Text("编辑") }
                 DropdownMenuItem(onClick = { showMenu = false; onGenerate() }) { Text("生成") }
                 DropdownMenuItem(onClick = { showMenu = false; onDelete() }) { Text("删除") }
@@ -400,7 +378,7 @@ fun JournalItemCard(
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun JournalEditorView(
+fun JournalEditor(
     initialContent: String,
     initialTags: List<String>,
     allTags: List<String>,
@@ -501,7 +479,7 @@ fun JournalEditorView(
 }
 
 @Composable
-fun CommentInputView(onSend: (String) -> Unit) {
+fun JournalComment(onSend: (String) -> Unit) {
     var content by rememberSaveable { mutableStateOf("") }
     Row(
         Modifier
@@ -517,6 +495,46 @@ fun CommentInputView(onSend: (String) -> Unit) {
             enabled = content.isNotBlank(),
             onClick = { onSend(content) }) {
             Icon(Icons.AutoMirrored.Default.Send, null)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterialApi::class)
+@Composable
+fun JournalSetting(agent: ChatAgent?, allAgents: List<ChatAgent>, onSelect: (id: String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded, onExpandedChange = { expanded = it }, modifier = Modifier
+            .padding(8.dp)
+            .fillMaxWidth()
+    ) {
+        TextField(
+            value = agent?.display() ?: "---",
+            onValueChange = {},
+            readOnly = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            singleLine = true,
+            modifier = Modifier.clickable(null, LocalIndication.current) {
+                expanded = true
+            }
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            allAgents.forEach { agent ->
+                DropdownMenuItem(
+                    onClick = {
+                        expanded = false
+                        onSelect(agent.id)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    AgentCard(agent) {
+                        onSelect(agent.id)
+                    }
+                }
+            }
         }
     }
 }
