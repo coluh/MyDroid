@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 data class Comment(
     val id: Int,
     val name: String,
+    val role: String,
     val content: String,
     val timestamp: Long
 )
@@ -84,16 +85,18 @@ class JournalViewModel(
                     },
                     image = j.image,
                     comments = commentMap[j.id].orEmpty().map { c ->
+                        val name = allAgents.find { it.id == c.name }?.name ?: c.name
                         Comment(
                             id = c.id,
-                            name = c.name,
+                            name = name,
+                            role = c.role,
                             content = c.content,
                             timestamp = c.time
                         )
                     },
                     timestamp = j.time
                 )
-            }.filter { j->
+            }.filter { j ->
                 !j.tags.any { it in hideTags }
             },
             tags = buildSet {
@@ -112,8 +115,8 @@ class JournalViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JournalScreenState())
 
-    fun clearStatus() = viewModelScope.launch {
-        _status.update { null }
+    fun updateStatus(s: String? = null) = viewModelScope.launch {
+        _status.update { s }
     }
 
     fun addJournal(content: String, tags: List<String>, uri: Uri?) = viewModelScope.launch {
@@ -145,8 +148,15 @@ class JournalViewModel(
         )
     }
 
-    fun addComment(journalId: Int, name: String, content: String) = viewModelScope.launch {
-        dao.insertComment(CommentEntity(journalId = journalId, name = name, content = content))
+    fun addAiComment(journalId: Int, name: String, content: String) = viewModelScope.launch {
+        dao.insertComment(CommentEntity(journalId = journalId, name = name, role = "assistant", content = content))
+    }
+
+    fun addUserComment(journalId: Int, name: String, content: String) = viewModelScope.launch {
+        dao.insertComment(CommentEntity(journalId = journalId, name = name, role = "user", content = content))
+        if (content.contains("LLM", ignoreCase = true)) {
+            generateReply(journalId)
+        }
     }
 
     fun deleteComment(commentId: Int) = viewModelScope.launch {
@@ -189,11 +199,7 @@ class JournalViewModel(
         val target = all.first { it.id == id }
         val messagesReversed = mutableListOf<String>()
 
-        fun timedContent(j: Journal): String = buildString {
-            appendLine("[" + timestampToLocalDateTimeString(j.timestamp) + "]")
-            appendLine(j.content)
-            j.comments.filter { it.name == "Destywen" }.forEach { appendLine(it.content) }
-        }
+        val agentNames = state.value.allAgents.map { it.name }
 
         val month = timestampToLocalDateTime(target.timestamp).monthValue
         for (j in all.subList(all.indexOf(target) + 1, all.size)) {
@@ -201,7 +207,12 @@ class JournalViewModel(
                 break
             }
 
-            messagesReversed.add(timedContent(j))
+            messagesReversed.add(buildString {
+                appendLine("[" + timestampToLocalDateTimeString(j.timestamp) + "]")
+                appendLine(j.content)
+                // filter by display name
+                j.comments.filter { it.name !in agentNames }.forEach { appendLine(it.content) }
+            })
         }
 
         val messages = messagesReversed.reversed().joinToString("\n")
@@ -209,19 +220,43 @@ class JournalViewModel(
             appendLine("## 历史随笔：")
             appendLine("\n" + messages)
             appendLine("## 最新随笔")
-            appendLine("\n" + timedContent(target))
+            appendLine("\n")
+            appendLine("[" + timestampToLocalDateTimeString(target.timestamp) + "]")
+            appendLine(target.content)
         }
 
-        val history = listOf(Message("user", user))
+        val history = mergeComments(target.comments, user)
 
-        _status.update { "等待模型响应..." }
-        try {
-            val result = service.chat(history, state.value.replyAgent!!)
-            addComment(id, state.value.replyAgent!!.name, result)
-            _status.update { null }
-        } catch (e: Exception) {
-            _status.update { "响应失败：${e.message}" }
+        _status.update { "调用请求已发送" }
+        service.chat(history, state.value.replyAgent!!)
+            .onSuccess {
+                addAiComment(id, state.value.replyAgent!!.id, it)
+                _status.update { null }
+            }.onFailure { e ->
+                _status.update { "响应失败：${e.message ?: "unknown"}" }
+            }
+    }
+
+    private fun mergeComments(comments: List<Comment>, userPrefix: String): List<Message> {
+        if (comments.isEmpty()) return listOf(Message("user", userPrefix))
+
+        val result = mutableListOf<Message>()
+        var currentRole = comments[0].role
+        var currentContent = StringBuilder(userPrefix).append("\n").append(comments[0].content)
+
+        for (i in 1 until comments.size) {
+            val comment = comments[i]
+            if (comment.role == currentRole) {
+                currentContent.append("\n").append(comment.content)
+            } else {
+                result.add(Message(currentRole, currentContent.toString()))
+                currentRole = comment.role
+                currentContent = StringBuilder(comment.content)
+            }
         }
+
+        result.add(Message(currentRole, currentContent.toString()))
+        return result
     }
 
     companion object {

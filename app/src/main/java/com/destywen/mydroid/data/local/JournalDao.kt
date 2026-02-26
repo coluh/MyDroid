@@ -33,6 +33,7 @@ data class CommentEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val journalId: Int,
     val name: String = "system", // agent id
+    val role: String, // "user" | "assistant"
     val content: String,
     val time: Long = System.currentTimeMillis()
 )

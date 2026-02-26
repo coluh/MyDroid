@@ -12,7 +12,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -20,7 +19,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,7 +32,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.AppBarDefaults
-import androidx.compose.material.BottomSheetScaffold
 import androidx.compose.material.Button
 import androidx.compose.material.Card
 import androidx.compose.material.Chip
@@ -65,7 +62,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -86,7 +82,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.destywen.mydroid.R
@@ -127,6 +122,9 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
             }
         }
     }
+    LaunchedEffect(filteredJournals.size) {
+        viewModel.updateStatus("找到${filteredJournals.size}条记录")
+    }
 
     var shouldScroll by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.journals.size) {
@@ -136,18 +134,19 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
         }
     }
 
-    LaunchedEffect(state.status) {
-        state.status?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.clearStatus()
-        }
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
                 windowInsets = AppBarDefaults.topAppBarWindowInsets,
-                title = {},
+                title = {
+                    Text(
+                        state.status ?: "",
+                        style = MaterialTheme.typography.body2,
+                        color = MaterialTheme.colors.onPrimary.copy(alpha = 0.7f),
+                        modifier = Modifier.clickable(null, LocalIndication.current) {
+                            viewModel.updateStatus()
+                        })
+                },
                 navigationIcon = {
                     IconButton(onClick = { onNavigate() }) {
                         Icon(Icons.Default.Menu, null)
@@ -241,17 +240,19 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                     .fillMaxSize()
             ) {
                 items(filteredJournals, key = { it.id }) { journal ->
-                    JournalItemCard(journal, onEdit = {
-                        activeModal = JournalModal.Editor(journal.id, journal.content, journal.tags)
-                    }, onGenerate = {
-                        viewModel.generateReply(journal.id)
-                    }, onDelete = {
-                        viewModel.deleteJournal(journal.id)
-                    }, onComment = {
-                        activeModal = JournalModal.Comment(journal.id)
-                    }, onDeleteComment = {
-                        viewModel.deleteComment(it)
-                    })
+                    JournalItemCard(
+                        journal, modifier = Modifier.animateItem(),
+                        onEdit = {
+                            activeModal = JournalModal.Editor(journal.id, journal.content, journal.tags)
+                        }, onGenerate = {
+                            viewModel.generateReply(journal.id)
+                        }, onDelete = {
+                            viewModel.deleteJournal(journal.id)
+                        }, onComment = {
+                            activeModal = JournalModal.Comment(journal.id)
+                        }, onDeleteComment = {
+                            viewModel.deleteComment(it)
+                        })
                 }
             }
         }
@@ -277,7 +278,7 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                     })
 
                 is JournalModal.Comment -> JournalComment(onSend = { text ->
-                    viewModel.addComment(modal.journalId, username, text)
+                    viewModel.addUserComment(modal.journalId, username, text)
                     activeModal = JournalModal.None
                 })
 
@@ -296,6 +297,7 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
 @Composable
 fun JournalItemCard(
     item: Journal,
+    modifier: Modifier,
     onEdit: () -> Unit,
     onGenerate: () -> Unit,
     onDelete: () -> Unit,
@@ -311,7 +313,7 @@ fun JournalItemCard(
     var showMenu by remember { mutableStateOf(false) }
 
     Card(
-        Modifier
+        modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp)
             .combinedClickable(

@@ -126,7 +126,7 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                     ModelSelector(
                         modifier = Modifier.width(200.dp),
                         options = state.allAgents,
-                        toText = { "${it.name} - ${it.modelName}" },
+                        toText = { it.display() },
                         selected = state.selectedAgent,
                         onSelect = {
                             viewModel.selectAgent(it.id)
@@ -188,10 +188,13 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                     }
             ) {
                 items(state.messages.asReversed(), key = { it.hashCode() }) { message ->
-                    ChatBubble(message, onDelete = {
-                        deletingMessage = it
-                        showDeleteConfirm = true
-                    })
+                    ChatBubble(
+                        message,
+                        modifier = Modifier.animateItem(),
+                        onDelete = {
+                            deletingMessage = it
+                            showDeleteConfirm = true
+                        })
                 }
                 item {
                     Spacer(modifier = Modifier.height(0.dp))
@@ -356,7 +359,7 @@ fun UserInput(modifier: Modifier, text: String? = null, responding: Boolean = tr
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage, onDelete: (msg: ChatMessage) -> Unit) {
+fun ChatBubble(message: ChatMessage, modifier: Modifier, onDelete: (msg: ChatMessage) -> Unit) {
 
     val alignment = if (message.isUser) Alignment.End else Alignment.Start
     val containerColor = when {
@@ -367,7 +370,7 @@ fun ChatBubble(message: ChatMessage, onDelete: (msg: ChatMessage) -> Unit) {
     val scope = rememberCoroutineScope()
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(8.dp)
             .combinedClickable(null, LocalIndication.current, onLongClick = {

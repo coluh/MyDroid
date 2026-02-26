@@ -43,7 +43,7 @@ class AppContainer(private val context: Context) {
 
     val database: AppDatabase by lazy {
         Room.databaseBuilder(context, AppDatabase::class.java, "mydroid.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(migration1to2, migration2to3, migration3to4)
             .build()
     }
     val journalDao: JournalDao get() = database.journalDao()
@@ -62,7 +62,7 @@ class AppContainer(private val context: Context) {
         FileManager(context)
     }
 
-    val MIGRATION_1_2 = object : Migration(1, 2) {
+    val migration1to2 = object : Migration(1, 2) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
                 """
@@ -78,9 +78,15 @@ class AppContainer(private val context: Context) {
         }
     }
 
-    val MIGRATION_2_3 = object : Migration(2, 3) {
+    val migration2to3 = object : Migration(2, 3) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE journals ADD COLUMN image TEXT DEFAULT NULL")
+        }
+    }
+
+    val migration3to4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE comments ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
         }
     }
 }

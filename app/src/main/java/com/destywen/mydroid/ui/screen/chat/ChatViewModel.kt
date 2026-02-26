@@ -93,9 +93,6 @@ class ChatViewModel(
             _generatingMessage.update { listOf(ChatMessage(content, true)) }
             _isResponding.update { true }
             val history = buildList {
-                if (agent.systemPrompt.isNotBlank()) {
-                    add(Message("system", agent.systemPrompt))
-                }
                 addAll(_dbMessages.first().takeLast(20).map {
                     Message(it.role, it.content)
                 })
@@ -104,13 +101,13 @@ class ChatViewModel(
 
             var fullResponse = ""
 
-            service.streamChat(history, agent)
+            service.chatStreaming(history, agent)
                 .catch { e ->
                     _userInput.update { content }
                     _generatingMessage.update { emptyList() }
                     _isResponding.update { false }
                     _error.update { e.message }
-                    AppLogger.e("streamChat", "流式请求出错了: ${e.message}")
+                    AppLogger.e("chatStreaming", e.message?:"unknown error")
                 }
                 .collect { token ->
                     fullResponse += token

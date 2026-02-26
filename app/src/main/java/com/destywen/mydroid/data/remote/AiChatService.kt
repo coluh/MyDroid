@@ -11,11 +11,13 @@ import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.header
 import io.ktor.client.request.post
-import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.readLine
 import kotlinx.coroutines.Dispatchers
@@ -45,50 +47,76 @@ object NetworkModule {
 
 class AiChatService(private val client: HttpClient) {
 
-    private val decoder = Json { ignoreUnknownKeys = true }
+    private val json = Json { ignoreUnknownKeys = true }
 
-    // TODO: use Result instead of try catch
-    suspend fun chat(history: List<Message>, config: ChatAgent): String = withContext(Dispatchers.IO) {
-        val prompt = listOf(Message("system", config.systemPrompt)) + history
-        try {
-            val rawResponse = client.post(config.endpoint) {
-                header("Authorization", "Bearer ${config.apiKey}")
+    suspend fun chat(context: List<Message>, config: ChatAgent): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val prompt = listOf(Message("system", config.systemPrompt)) + context
+            AppLogger.d(
+                "chat",
+                "request to ${config.endpoint}, model: ${config.modelName}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
+            )
+            AppLogger.d("chat", "$prompt")
+            val response = client.post(config.endpoint) {
+                header(HttpHeaders.Authorization, "Bearer ${config.apiKey}")
                 contentType(ContentType.Application.Json)
-                setBody(ChatRequest(model = config.modelName, messages = prompt, stream = false))
+                setBody(ChatRequest(config.modelName, prompt, stream = false))
             }
-            val response = rawResponse.body<ChatResponse>()
-            AppLogger.i("chat", "Token消耗数据：${response.usage}")
+            if (!response.status.isSuccess()) {
+                val body = response.bodyAsText()
+                val message = runCatching {
+                    json.decodeFromString<ChatErrorWrapper>(body).error.message
+                }.getOrElse {
+                    AppLogger.w("chat", "fail to parse error body: ${it.message}, body: $body")
+                    body
+                }
+                error("HTTP status ${response.status.value}, response $message")
+            }
 
-            response.choices.firstOrNull()?.message?.content ?: ""
-        } catch (e: Exception) {
-            AppLogger.e("chat", "请求失败：${e.message}")
-            throw e
+            val body = response.body<ChatResponse>()
+            AppLogger.i("chat", "${body.usage}")
+            body.choices.first().message.content
+        }.onFailure {
+            AppLogger.e("chat", it.message ?: "unknown error")
         }
     }
 
-    // TODO: system prompt here
-    fun streamChat(prompt: List<Message>, config: ChatAgent): Flow<String> = channelFlow {
-        client.preparePost(config.endpoint) {
-            header("Authorization", "Bearer ${config.apiKey}")
+    fun chatStreaming(context: List<Message>, config: ChatAgent): Flow<String> = channelFlow {
+        val prompt = listOf(Message("system", config.systemPrompt)) + context
+        AppLogger.d(
+            "chatStreaming",
+            "request to ${config.endpoint}, model: ${config.modelName}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
+        )
+        val response = client.post(config.endpoint) {
+            header(HttpHeaders.Authorization, "Bearer ${config.apiKey}")
             contentType(ContentType.Application.Json)
-            setBody(ChatRequest(model = config.modelName, messages = prompt, stream = true))
-        }.execute { response ->
-            val channel = response.bodyAsChannel()
-            while (!channel.isClosedForRead) {
-                val line = channel.readLine() ?: break
-                if (line.startsWith("data: ")) {
-                    val data = line.removePrefix("data: ").trim()
-                    if (data == "[DONE]") break
-                    try {
-                        val delta = decoder.decodeFromString<ChatStreamResponse>(data)
-                            .choices.firstOrNull()?.delta?.content
-                        if (delta != null) {
-                            send(delta)
-                        }
-                    } catch (e: Exception) {
-                        AppLogger.e("streamChat", "解析出错了: ${e.message}")
-                    }
-                }
+            setBody(ChatRequest(config.modelName, prompt, stream = true))
+        }
+        if (!response.status.isSuccess()) {
+            val body = response.bodyAsText()
+            val message = runCatching {
+                json.decodeFromString<ChatErrorWrapper>(body).error.message
+            }.getOrElse {
+                AppLogger.w("chat", "fail to parse error body: ${it.message}, body: $body")
+                body
+            }
+            error("HTTP ${response.status.value}: $message")
+        }
+
+        val channel = response.bodyAsChannel()
+        while (!channel.isClosedForRead) {
+            val line = channel.readLine() ?: continue
+            if (!line.startsWith("data:")) continue
+            val data = line.removePrefix("data:").trim()
+            if (data == "[DONE]") break
+
+            val chunk = runCatching {
+                json.decodeFromString<StreamChunk>(data)
+            }.getOrElse {
+                error("fail to parse chunk: ${it.message}, data: $data")
+            }
+            chunk.choices.firstOrNull()?.delta?.content?.let {
+                send(it)
             }
         }
     }.flowOn(Dispatchers.IO)
