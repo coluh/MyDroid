@@ -252,11 +252,12 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                             activeModal = JournalModal.Comment(journal.id)
                         }, onDeleteComment = {
                             viewModel.deleteComment(it)
+                        }, onClickTag = {
+                            query = it
                         })
                 }
             }
         }
-
 
         BottomModal(
             visible = activeModal != JournalModal.None,
@@ -303,6 +304,7 @@ fun JournalItemCard(
     onDelete: () -> Unit,
     onComment: () -> Unit,
     onDeleteComment: (commentId: Int) -> Unit,
+    onClickTag: (tag: String) -> Unit,
 ) {
     val context = LocalContext.current
     val imgDir = remember(context) { File(context.filesDir, "img") }
@@ -330,7 +332,7 @@ fun JournalItemCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                 ) {
                     item.tags.filter { it.isNotBlank() }.forEach {
-                        Chip(onClick = {}, modifier = Modifier.height(32.dp)) { Text(it) }
+                        Chip(onClick = { onClickTag(it) }, modifier = Modifier.height(32.dp)) { Text(it) }
                     }
                 }
             }

@@ -12,6 +12,7 @@ import com.destywen.mydroid.data.local.ChatAgent
 import com.destywen.mydroid.data.local.CommentEntity
 import com.destywen.mydroid.data.local.JournalDao
 import com.destywen.mydroid.data.local.JournalEntity
+import com.destywen.mydroid.data.local.Role
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.Message
 import com.destywen.mydroid.domain.FileManager
@@ -155,6 +156,7 @@ class JournalViewModel(
     fun addUserComment(journalId: Int, name: String, content: String) = viewModelScope.launch {
         dao.insertComment(CommentEntity(journalId = journalId, name = name, role = "user", content = content))
         if (content.contains("LLM", ignoreCase = true)) {
+            // TODO: ui not synced yet, use comments from database
             generateReply(journalId)
         }
     }
@@ -238,7 +240,7 @@ class JournalViewModel(
     }
 
     private fun mergeComments(comments: List<Comment>, userPrefix: String): List<Message> {
-        if (comments.isEmpty()) return listOf(Message("user", userPrefix))
+        if (comments.isEmpty()) return listOf(Message(Role.USER, userPrefix))
 
         val result = mutableListOf<Message>()
         var currentRole = comments[0].role
@@ -256,6 +258,9 @@ class JournalViewModel(
         }
 
         result.add(Message(currentRole, currentContent.toString()))
+        if (result.last().role == Role.ASSISTANT) {
+            result.removeAt(result.lastIndex)
+        }
         return result
     }
 

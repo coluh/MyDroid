@@ -7,6 +7,12 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
+object Role {
+    const val SYSTEM = "system"
+    const val USER = "user"
+    const val ASSISTANT = "assistant"
+}
+
 @Entity(tableName = "chat_messages")
 data class ChatMessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

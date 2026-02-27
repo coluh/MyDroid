@@ -2,6 +2,7 @@ package com.destywen.mydroid.data.remote
 
 import com.destywen.mydroid.domain.AppLogger
 import com.destywen.mydroid.data.local.ChatAgent
+import com.destywen.mydroid.data.local.Role
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
@@ -11,6 +12,7 @@ import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
@@ -51,7 +53,7 @@ class AiChatService(private val client: HttpClient) {
 
     suspend fun chat(context: List<Message>, config: ChatAgent): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            val prompt = listOf(Message("system", config.systemPrompt)) + context
+            val prompt = listOf(Message(Role.SYSTEM, config.systemPrompt)) + context
             AppLogger.d(
                 "chat",
                 "request to ${config.endpoint}, model: ${config.modelName}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
@@ -82,41 +84,43 @@ class AiChatService(private val client: HttpClient) {
     }
 
     fun chatStreaming(context: List<Message>, config: ChatAgent): Flow<String> = channelFlow {
-        val prompt = listOf(Message("system", config.systemPrompt)) + context
+        val prompt = listOf(Message(Role.SYSTEM, config.systemPrompt)) + context
         AppLogger.d(
             "chatStreaming",
             "request to ${config.endpoint}, model: ${config.modelName}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
         )
-        val response = client.post(config.endpoint) {
+        AppLogger.d("chatStreaming", "$prompt")
+        client.preparePost(config.endpoint) {
             header(HttpHeaders.Authorization, "Bearer ${config.apiKey}")
             contentType(ContentType.Application.Json)
             setBody(ChatRequest(config.modelName, prompt, stream = true))
-        }
-        if (!response.status.isSuccess()) {
-            val body = response.bodyAsText()
-            val message = runCatching {
-                json.decodeFromString<ChatErrorWrapper>(body).error.message
-            }.getOrElse {
-                AppLogger.w("chat", "fail to parse error body: ${it.message}, body: $body")
-                body
+        }.execute { response ->
+            if (!response.status.isSuccess()) {
+                val body = response.bodyAsText()
+                val message = runCatching {
+                    json.decodeFromString<ChatErrorWrapper>(body).error.message
+                }.getOrElse {
+                    AppLogger.w("chat", "fail to parse error body: ${it.message}, body: $body")
+                    body
+                }
+                error("HTTP ${response.status.value}: $message")
             }
-            error("HTTP ${response.status.value}: $message")
-        }
 
-        val channel = response.bodyAsChannel()
-        while (!channel.isClosedForRead) {
-            val line = channel.readLine() ?: continue
-            if (!line.startsWith("data:")) continue
-            val data = line.removePrefix("data:").trim()
-            if (data == "[DONE]") break
+            val channel = response.bodyAsChannel()
+            while (!channel.isClosedForRead) {
+                val line = channel.readLine() ?: continue
+                if (!line.startsWith("data:")) continue
+                val data = line.removePrefix("data:").trim()
+                if (data == "[DONE]") break
 
-            val chunk = runCatching {
-                json.decodeFromString<StreamChunk>(data)
-            }.getOrElse {
-                error("fail to parse chunk: ${it.message}, data: $data")
-            }
-            chunk.choices.firstOrNull()?.delta?.content?.let {
-                send(it)
+                val chunk = runCatching {
+                    json.decodeFromString<StreamChunk>(data)
+                }.getOrElse {
+                    error("fail to parse chunk: ${it.message}, data: $data")
+                }
+                chunk.choices.firstOrNull()?.delta?.content?.let {
+                    send(it)
+                }
             }
         }
     }.flowOn(Dispatchers.IO)
