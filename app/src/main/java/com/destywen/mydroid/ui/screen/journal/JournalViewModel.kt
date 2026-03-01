@@ -6,9 +6,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.destywen.mydroid.AppContainer
+import com.destywen.mydroid.data.local.AgentEntity
 import com.destywen.mydroid.domain.AppLogger
 import com.destywen.mydroid.data.local.AppSettings
-import com.destywen.mydroid.data.local.ChatAgent
+import com.destywen.mydroid.data.local.ChatDao
 import com.destywen.mydroid.data.local.CommentEntity
 import com.destywen.mydroid.data.local.JournalDao
 import com.destywen.mydroid.data.local.JournalEntity
@@ -16,8 +17,8 @@ import com.destywen.mydroid.data.local.Role
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.Message
 import com.destywen.mydroid.domain.FileManager
-import com.destywen.mydroid.util.timestampToLocalDateTime
-import com.destywen.mydroid.util.timestampToLocalDateTimeString
+import com.destywen.mydroid.util.toDateTime
+import com.destywen.mydroid.util.toDateTimeString
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -48,70 +49,60 @@ data class JournalScreenState(
     val journals: List<Journal> = emptyList(),
     val tags: List<String> = emptyList(),
     val hideTags: List<String> = emptyList(),
-    val allAgents: List<ChatAgent> = emptyList(),
-    val replyAgent: ChatAgent? = null,
+    val allAgents: List<AgentEntity> = emptyList(),
+    val replyAgent: AgentEntity? = null,
     val status: String? = null,
 )
 
 class JournalViewModel(
-    private val dao: JournalDao,
+    private val journalDao: JournalDao,
+    chatDao: ChatDao,
     private val manager: FileManager,
     private val service: AiChatService,
     private val settings: AppSettings
 ) : ViewModel() {
-    private val journalsFlow = dao.getAllJournals()
-    private val commentsFlow = dao.getAllComments()
-    private val hideTagsFlow = settings.hideTagsFlow
-    private val agentsFlow = settings.agentsFlow
-    private val replyAgentId = settings.journalAgentIdFlow
+    private val _journalsFlow = journalDao.getAllJournals()
+    private val _commentsFlow = journalDao.getAllComments()
+    private val _agentsFlow = chatDao.getAgents()
     private val _status = MutableStateFlow<String?>(null)
 
-    private val commentsByJournalId = commentsFlow.map { comments -> comments.groupBy { it.journalId } }
+    private val hideTags = settings.hideTags.map { it?.split(",") ?: emptyList() }
+    private val settingsFlow = combine(hideTags, settings.journalAgentId) { a, b -> Pair(a, b) }
+    private val commentsByJournalId = _commentsFlow.map { comments -> comments.groupBy { it.journalId } }
+    private val journals = combine(_journalsFlow, commentsByJournalId, _agentsFlow) { journals, commentMap, agents ->
+        journals.map { journal ->
+            Journal(
+                id = journal.id,
+                content = journal.content,
+                tags = journal.tag.takeIf { it.isNotBlank() }?.split(",") ?: emptyList(),
+                image = journal.image,
+                comments = commentMap[journal.id].orEmpty().map { c ->
+                    val name = if (c.role == Role.USER) {
+                        c.name
+                    } else {
+                        agents.find { it.id.toString() == c.name }?.name ?: "LLM-${c.name.take(6)}"
+                    }
+                    Comment(c.id, name, c.role, c.content, c.time)
+                },
+                journal.time
+            )
+        }
+    }
 
     val state = combine(
-        combine(journalsFlow, commentsByJournalId) { a, b -> Pair(a, b) },
-        combine(hideTagsFlow, agentsFlow, replyAgentId) { a, b, c -> Triple(a, b, c) },
+        journals,
+        _agentsFlow,
+        settingsFlow,
         _status
-    ) { (journals, commentMap), (hideTagsString, allAgents, replyAgentId), status ->
-        val hideTags = hideTagsString?.split(",") ?: emptyList()
+    ) { journals, agents, (hideTags, replyAgentId), status ->
         JournalScreenState(
-            journals = journals.map { j ->
-                Journal(
-                    id = j.id,
-                    content = j.content,
-                    tags = if (j.tag.isNotBlank()) {
-                        j.tag.split(",")
-                    } else {
-                        emptyList()
-                    },
-                    image = j.image,
-                    comments = commentMap[j.id].orEmpty().map { c ->
-                        val name = allAgents.find { it.id == c.name }?.name ?: c.name
-                        Comment(
-                            id = c.id,
-                            name = name,
-                            role = c.role,
-                            content = c.content,
-                            timestamp = c.time
-                        )
-                    },
-                    timestamp = j.time
-                )
-            }.filter { j ->
-                !j.tags.any { it in hideTags }
-            },
-            tags = buildSet {
-                journals.forEach { j ->
-                    j.tag.split(",").forEach { tag ->
-                        if (tag.isNotBlank()) {
-                            add(tag)
-                        }
-                    }
-                }
-            }.toList(),
+            journals = journals.filter { j -> !j.tags.any { it in hideTags } },
+            tags = journals.flatMap { j ->
+                j.tags.filter { it.isNotBlank() }
+            }.distinct(),
             hideTags = hideTags,
-            allAgents = allAgents,
-            replyAgent = allAgents.find { it.id == replyAgentId },
+            allAgents = agents,
+            replyAgent = agents.find { it.id.toString() == replyAgentId },
             status = status,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JournalScreenState())
@@ -130,18 +121,18 @@ class JournalViewModel(
         val imageName = uri?.let {
             manager.saveImage(uri)
         }
-        dao.upsertJournal(JournalEntity(content = content, tag = tagString, image = imageName))
+        journalDao.upsertJournal(JournalEntity(content = content, tag = tagString, image = imageName))
     }
 
     fun updateJournal(id: Int, content: String, tags: List<String>) = viewModelScope.launch {
-        val origin = journalsFlow.first().first { it.id == id }
+        val origin = _journalsFlow.first().first { it.id == id }
 
         val tagString = tags.asSequence()
             .flatMap { it.split(",") }
             .map { it.trim() }.filter { it.isNotEmpty() }
             .distinct()
             .joinToString(",")
-        dao.upsertJournal(
+        journalDao.upsertJournal(
             origin.copy(
                 content = content,
                 tag = tagString,
@@ -150,11 +141,18 @@ class JournalViewModel(
     }
 
     fun addAiComment(journalId: Int, name: String, content: String) = viewModelScope.launch {
-        dao.insertComment(CommentEntity(journalId = journalId, name = name, role = "assistant", content = content))
+        journalDao.insertComment(
+            CommentEntity(
+                journalId = journalId,
+                name = name,
+                role = "assistant",
+                content = content
+            )
+        )
     }
 
     fun addUserComment(journalId: Int, name: String, content: String) = viewModelScope.launch {
-        dao.insertComment(CommentEntity(journalId = journalId, name = name, role = "user", content = content))
+        journalDao.insertComment(CommentEntity(journalId = journalId, name = name, role = "user", content = content))
         if (content.contains("LLM", ignoreCase = true)) {
             // TODO: ui not synced yet, use comments from database
             generateReply(journalId)
@@ -162,55 +160,56 @@ class JournalViewModel(
     }
 
     fun deleteComment(commentId: Int) = viewModelScope.launch {
-        dao.deleteComment(commentId)
+        journalDao.deleteComment(commentId)
     }
 
     fun deleteJournal(id: Int) = viewModelScope.launch {
-        val origin = journalsFlow.first().first { it.id == id }
+        val origin = _journalsFlow.first().first { it.id == id }
         origin.image?.let { manager.deleteImage(origin.image) }
-        dao.deleteCommentsOfJournal(id)
-        dao.deleteJournal(id)
+        journalDao.deleteCommentsOfJournal(id)
+        journalDao.deleteJournal(id)
     }
 
     fun hideTag(tag: String) = viewModelScope.launch {
-        val hidedTags = settings.hideTagsFlow.first()?.split(",") ?: emptyList()
+        val hidedTags = settings.hideTags.first()?.split(",") ?: emptyList()
         val newList = (hidedTags + listOf(tag)).distinct().joinToString(",")
         settings.updateHideTags(newList)
     }
 
     fun showTag(tag: String) = viewModelScope.launch {
-        val hidedTags = settings.hideTagsFlow.first()?.split(",") ?: emptyList()
+        val hidedTags = settings.hideTags.first()?.split(",") ?: emptyList()
         val newList = hidedTags.filter { it != tag }.joinToString(",")
         settings.updateHideTags(newList)
     }
 
-    fun selectReplyAgent(id: String) = viewModelScope.launch {
+    fun selectReplyAgent(id: Long) = viewModelScope.launch {
         settings.updateJournalAgentId(id)
     }
 
     fun generateReply(id: Int) = viewModelScope.launch {
         if (state.value.replyAgent == null) {
             AppLogger.i("JournalViewModel.generateReply", "agent not set")
+            _status.update { "回复模型为空" }
             return@launch
         }
         _status.update { "正在构建上下文..." }
 
-        val all = state.value.journals.filter { j ->
-            !j.tags.any { it in state.value.hideTags }
+        val all = journals.first().filter { j ->
+            !j.tags.any { it in hideTags.first() }
         }
         val target = all.first { it.id == id }
         val messagesReversed = mutableListOf<String>()
 
         val agentNames = state.value.allAgents.map { it.name }
 
-        val month = timestampToLocalDateTime(target.timestamp).monthValue
+        val month = target.timestamp.toDateTime().monthValue
         for (j in all.subList(all.indexOf(target) + 1, all.size)) {
-            if (timestampToLocalDateTime(j.timestamp).monthValue != month) {
+            if (j.timestamp.toDateTime().monthValue != month) {
                 break
             }
 
             messagesReversed.add(buildString {
-                appendLine("[" + timestampToLocalDateTimeString(j.timestamp) + "]")
+                appendLine("[" + j.timestamp.toDateTimeString() + "]")
                 appendLine(j.content)
                 // filter by display name
                 j.comments.filter { it.name !in agentNames }.forEach { appendLine(it.content) }
@@ -223,7 +222,7 @@ class JournalViewModel(
             appendLine("\n" + messages)
             appendLine("## 最新随笔")
             appendLine("\n")
-            appendLine("[" + timestampToLocalDateTimeString(target.timestamp) + "]")
+            appendLine("[" + target.timestamp.toDateTimeString() + "]")
             appendLine(target.content)
         }
 
@@ -232,7 +231,7 @@ class JournalViewModel(
         _status.update { "调用请求已发送" }
         service.chat(history, state.value.replyAgent!!)
             .onSuccess {
-                addAiComment(id, state.value.replyAgent!!.id, it)
+                addAiComment(id, state.value.replyAgent!!.id.toString(), it)
                 _status.update { null }
             }.onFailure { e ->
                 _status.update { "响应失败：${e.message ?: "unknown"}" }
@@ -243,11 +242,10 @@ class JournalViewModel(
         if (comments.isEmpty()) return listOf(Message(Role.USER, userPrefix))
 
         val result = mutableListOf<Message>()
-        var currentRole = comments[0].role
-        var currentContent = StringBuilder(userPrefix).append("\n").append(comments[0].content)
+        var currentRole = Role.USER
+        var currentContent = StringBuilder(userPrefix)
 
-        for (i in 1 until comments.size) {
-            val comment = comments[i]
+        for (comment in comments) {
             if (comment.role == currentRole) {
                 currentContent.append("\n").append(comment.content)
             } else {
@@ -267,7 +265,13 @@ class JournalViewModel(
     companion object {
         fun Factory(container: AppContainer) = viewModelFactory {
             initializer {
-                JournalViewModel(container.journalDao, container.fileManager, container.chatService, container.settings)
+                JournalViewModel(
+                    container.journalDao,
+                    container.chatDao,
+                    container.fileManager,
+                    container.chatService,
+                    container.settings
+                )
             }
         }
     }

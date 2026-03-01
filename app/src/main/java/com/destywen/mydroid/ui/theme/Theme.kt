@@ -7,7 +7,10 @@ import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-val lightColors = lightColors(background = Color(0xFFF3F4F6)) // TODO: more grays
+val lightColors = lightColors(
+    background = Color(0xFFFAFAFA),
+    surface = Color(0xFFE4E4E7)
+)
 
 val darkColors = darkColors()
 

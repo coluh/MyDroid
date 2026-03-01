@@ -5,60 +5,37 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.map
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import java.util.UUID
-
-@Serializable
-data class ChatAgent(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String,
-    val endpoint: String,
-    val apiKey: String,
-    val modelName: String,
-    val systemPrompt: String
-) {
-    fun display() = "$name-${modelName.take(3)}"
-}
 
 private val Context.dataStore by preferencesDataStore(name = "app_settings")
 
 class AppSettings(private val context: Context) {
 
     private object Keys {
+        // info
+        val USERNAME = stringPreferencesKey("username")
+
         // journal page
         val HIDE_TAGS = stringPreferencesKey("hide_tags")
         val JOURNAL_AGENT_ID = stringPreferencesKey("journal_agent_id")
 
-        // chat page
-        val AGENTS_JSON = stringPreferencesKey("agents_json")
-        val SELECTED_AGENT_ID = stringPreferencesKey("selected_agent_id")
+        // agents
+        val DEFAULT_ENDPOINT = stringPreferencesKey("default_endpoint")
+        val DEFAULT_API_KEY = stringPreferencesKey("default_api_key")
     }
 
-    val hideTagsFlow = context.dataStore.data.map { it[Keys.HIDE_TAGS] }
-    val journalAgentIdFlow = context.dataStore.data.map { it[Keys.JOURNAL_AGENT_ID] }
-    val agentsFlow = context.dataStore.data.map { prefs ->
-        prefs[Keys.AGENTS_JSON]?.let {
-            runCatching {
-                Json.decodeFromString<List<ChatAgent>>(it)
-            }.getOrDefault(emptyList())
-        } ?: emptyList()
-    }
-    val selectedAgentIdFlow = context.dataStore.data.map { it[Keys.SELECTED_AGENT_ID] }
+    val username = context.dataStore.data.map { it[Keys.USERNAME]?:"Destywen" }
+    val hideTags = context.dataStore.data.map { it[Keys.HIDE_TAGS] }
+    val journalAgentId = context.dataStore.data.map { it[Keys.JOURNAL_AGENT_ID] }
+    val defaultEndpoint = context.dataStore.data.map { it[Keys.DEFAULT_ENDPOINT] }
+    val defaultApiKey = context.dataStore.data.map { it[Keys.DEFAULT_API_KEY] }
 
-    suspend fun updateHideTags(tags: String) {
-        context.dataStore.edit { it[Keys.HIDE_TAGS] = tags }
-    }
+    suspend fun updateUsername(name: String) = context.dataStore.edit { it[Keys.USERNAME] = name }
 
-    suspend fun updateJournalAgentId(id: String) {
-        context.dataStore.edit { it[Keys.JOURNAL_AGENT_ID] = id }
-    }
+    suspend fun updateHideTags(tags: String) = context.dataStore.edit { it[Keys.HIDE_TAGS] = tags }
 
-    suspend fun updateAgents(list: List<ChatAgent>) {
-        context.dataStore.edit { it[Keys.AGENTS_JSON] = Json.encodeToString(list) }
-    }
+    suspend fun updateJournalAgentId(id: Long) = context.dataStore.edit { it[Keys.JOURNAL_AGENT_ID] = id.toString() }
 
-    suspend fun selectAgent(id: String) {
-        context.dataStore.edit { it[Keys.SELECTED_AGENT_ID] = id }
-    }
+    suspend fun updateDefaultEndpoint(value: String) = context.dataStore.edit { it[Keys.DEFAULT_ENDPOINT] = value }
+
+    suspend fun updateDefaultApiKey(apiKey: String) = context.dataStore.edit { it[Keys.DEFAULT_API_KEY] = apiKey }
 }

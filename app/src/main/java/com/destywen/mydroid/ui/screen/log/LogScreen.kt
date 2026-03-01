@@ -34,7 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.LogEntity
 import com.destywen.mydroid.data.local.LogLevel
-import com.destywen.mydroid.util.timestampToLocalDateTimeString
+import com.destywen.mydroid.util.toDateTimeString
 
 
 @Composable
@@ -89,7 +89,7 @@ fun LogItem(log: LogEntity) {
     Column(Modifier.padding(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = timestampToLocalDateTimeString(log.timestamp),
+                text = log.timestamp.toDateTimeString(),
                 color = Color.Gray,
                 style = MaterialTheme.typography.caption
             )

@@ -12,6 +12,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -19,6 +20,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -85,10 +87,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.destywen.mydroid.R
-import com.destywen.mydroid.data.local.ChatAgent
+import com.destywen.mydroid.data.local.AgentEntity
 import com.destywen.mydroid.ui.components.AgentCard
 import com.destywen.mydroid.ui.components.BottomModal
-import com.destywen.mydroid.util.timestampToLocalDateTimeString
+import com.destywen.mydroid.util.toDateTimeString
 import kotlinx.parcelize.Parcelize
 import java.io.File
 
@@ -238,6 +240,8 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                 modifier = Modifier
                     .animateContentSize()
                     .fillMaxSize()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(filteredJournals, key = { it.id }) { journal ->
                     JournalItemCard(
@@ -317,7 +321,6 @@ fun JournalItemCard(
     Card(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = LocalIndication.current,
@@ -368,7 +371,7 @@ fun JournalItemCard(
                 }
             }
 
-            Text(timestampToLocalDateTimeString(item.timestamp), fontSize = 12.sp)
+            Text(item.timestamp.toDateTimeString(), fontSize = 12.sp)
 
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                 DropdownMenuItem(onClick = { showMenu = false; copyText(item.content) }) { Text("复制") }
@@ -505,7 +508,7 @@ fun JournalComment(onSend: (String) -> Unit) {
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun JournalSetting(agent: ChatAgent?, allAgents: List<ChatAgent>, onSelect: (id: String) -> Unit) {
+fun JournalSetting(agent: AgentEntity?, allAgents: List<AgentEntity>, onSelect: (id: Long) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
 
     ExposedDropdownMenuBox(
@@ -514,7 +517,7 @@ fun JournalSetting(agent: ChatAgent?, allAgents: List<ChatAgent>, onSelect: (id:
             .fillMaxWidth()
     ) {
         TextField(
-            value = agent?.display() ?: "---",
+            value = agent?.display ?: "---",
             onValueChange = {},
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
@@ -523,19 +526,26 @@ fun JournalSetting(agent: ChatAgent?, allAgents: List<ChatAgent>, onSelect: (id:
                 expanded = true
             }
         )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            allAgents.forEach { agent ->
-                DropdownMenuItem(
-                    onClick = {
-                        expanded = false
-                        onSelect(agent.id)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                ) {
-                    AgentCard(agent) {
-                        onSelect(agent.id)
+        ExposedDropdownMenu(
+            expanded = expanded, onDismissRequest = { expanded = false },
+            modifier = Modifier.background(MaterialTheme.colors.background)
+        ) {
+            Column(Modifier
+                .fillMaxSize()
+                .padding(8.dp, 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                allAgents.forEach { agent ->
+                    DropdownMenuItem(
+                        onClick = {
+                            expanded = false
+                            onSelect(agent.id)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth(),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        AgentCard(agent, modifier = Modifier.clickable(null, LocalIndication.current) {
+                            onSelect(agent.id)
+                        })
                     }
                 }
             }

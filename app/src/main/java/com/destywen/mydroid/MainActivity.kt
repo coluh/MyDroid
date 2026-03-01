@@ -43,7 +43,7 @@ class AppContainer(private val context: Context) {
 
     val database: AppDatabase by lazy {
         Room.databaseBuilder(context, AppDatabase::class.java, "mydroid.db")
-            .addMigrations(migration1to2, migration2to3, migration3to4)
+            .addMigrations(migration1to2, migration2to3, migration3to4, migration4to5, migration5to6)
             .build()
     }
     val journalDao: JournalDao get() = database.journalDao()
@@ -55,7 +55,7 @@ class AppContainer(private val context: Context) {
     }
 
     val chatService: AiChatService by lazy {
-        AiChatService(NetworkModule.client)
+        AiChatService(NetworkModule.client, settings)
     }
 
     val fileManager: FileManager by lazy {
@@ -87,6 +87,41 @@ class AppContainer(private val context: Context) {
     val migration3to4 = object : Migration(3, 4) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE comments ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+        }
+    }
+
+    val migration4to5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `chat_agents` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `systemPrompt` TEXT NOT NULL,
+                    `apiEndpoint` TEXT,
+                    `apiKey` TEXT,
+                    `modelName` TEXT NOT NULL,
+                    `temperature` REAL NOT NULL,
+                    `createdAt` INTEGER NOT NULL
+                )
+            """.trimIndent())
+
+            db.execSQL("DROP TABLE chat_messages")
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `chat_messages` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `agentId` INTEGER,
+                    `role` TEXT NOT NULL,
+                    `content` TEXT NOT NULL,
+                    `timestamp` INTEGER NOT NULL,
+                    FOREIGN KEY(`agentId`) REFERENCES `chat_agents`(`id`) ON UPDATE NO ACTION ON DELETE NO ACTION
+                )
+            """.trimIndent())
+        }
+    }
+
+    val migration5to6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_chat_messages_agentId ON chat_messages(agentId)")
         }
     }
 }
