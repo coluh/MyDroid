@@ -1,5 +1,7 @@
 package com.destywen.mydroid.data.remote
 
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -19,14 +21,17 @@ data class ChatRequest(
     val maxTokens: Int? = null,
     val n: Int? = null,
     val stop: List<String>? = null,
+    @SerialName("enable_thinking")
+    val enableThinking: Boolean? =null
     // responseFormat
 )
 
 @Serializable
+@Parcelize
 data class Message(
     val role: String, // "system" | "user" | "assistant"
     val content: String
-)
+) : Parcelable
 
 /*
 * Non-Streaming Response

@@ -2,8 +2,8 @@ package com.destywen.mydroid.data.remote
 
 import com.destywen.mydroid.data.local.AgentEntity
 import com.destywen.mydroid.data.local.AppSettings
-import com.destywen.mydroid.domain.AppLogger
 import com.destywen.mydroid.data.local.Role
+import com.destywen.mydroid.domain.AppLogger
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
@@ -49,7 +49,7 @@ object NetworkModule {
     }
 }
 
-class AiChatService(private val client: HttpClient, private val settings: AppSettings) {
+class AiChatService(private val client: HttpClient, settings: AppSettings) {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val defaultEndpoint = settings.defaultEndpoint
@@ -58,14 +58,14 @@ class AiChatService(private val client: HttpClient, private val settings: AppSet
     suspend fun chat(context: List<Message>, config: AgentEntity): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val prompt = listOf(Message(Role.SYSTEM, config.systemPrompt)) + context
-            val endpoint = config.apiEndpoint?:defaultEndpoint.first()
-            val apiKey = config.apiKey?:defaultApiKey.first()
+            val endpoint = config.apiEndpoint ?: defaultEndpoint.first()
+            val apiKey = config.apiKey ?: defaultApiKey.first()
             if (endpoint == null) {
                 error("endpoint not set")
             }
             AppLogger.i(
                 "chat",
-                "request to ${config.apiEndpoint}, model: ${config.modelName}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
+                "request to ${endpoint}, model: ${config.modelName}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
             )
             AppLogger.d("chat", "$prompt")
             val response = client.post(endpoint) {
@@ -94,20 +94,21 @@ class AiChatService(private val client: HttpClient, private val settings: AppSet
 
     fun chatStreaming(context: List<Message>, config: AgentEntity): Flow<String> = channelFlow {
         val prompt = listOf(Message(Role.SYSTEM, config.systemPrompt)) + context
-        val endpoint = config.apiEndpoint?:defaultEndpoint.first()
-        val apiKey = config.apiKey?:defaultApiKey.first()
+        val endpoint = config.apiEndpoint ?: defaultEndpoint.first()
+        val apiKey = config.apiKey ?: defaultApiKey.first()
         if (endpoint == null) {
             error("endpoint not set")
         }
+        val thinking = if (config.modelName.contains("qwen3.5")) false else null // don't want default think
         AppLogger.i(
             "chatStreaming",
-            "request to ${config.apiEndpoint}, model: ${config.modelName}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
+            "request to ${endpoint}, model: ${config.modelName}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
         )
         AppLogger.d("chatStreaming", "$prompt")
         client.preparePost(endpoint) {
             header(HttpHeaders.Authorization, "Bearer $apiKey")
             contentType(ContentType.Application.Json)
-            setBody(ChatRequest(config.modelName, prompt, stream = true))
+            setBody(ChatRequest(config.modelName, prompt, stream = true, enableThinking = thinking))
         }.execute { response ->
             if (!response.status.isSuccess()) {
                 val body = response.bodyAsText()

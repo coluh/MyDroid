@@ -18,9 +18,9 @@ data class AgentEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val systemPrompt: String,
-    val apiEndpoint: String?,
-    val apiKey: String?,
     val modelName: String,
+    val apiEndpoint: String? = null,
+    val apiKey: String? = null,
     val temperature: Float = 0.7f,
     val createdAt: Long = System.currentTimeMillis(),
 ) : Parcelable {
