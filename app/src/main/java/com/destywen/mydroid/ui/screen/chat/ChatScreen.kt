@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AppBarDefaults
@@ -70,6 +71,7 @@ import com.destywen.mydroid.data.local.AgentEntity
 import com.destywen.mydroid.data.local.Role
 import com.destywen.mydroid.ui.components.AgentCard
 import com.destywen.mydroid.ui.components.BottomModal
+import com.destywen.mydroid.util.toSmartTime
 import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
 
@@ -81,11 +83,35 @@ sealed class ChatScreenModal : Parcelable {
     data class Agents(val agents: List<AgentEntity>) : ChatScreenModal()
 }
 
+sealed class ChatListItem {
+    data class MessageItem(val message: ChatMessage) : ChatListItem()
+    data class TimeDivider(val timeText: String) : ChatListItem()
+}
+
+@Composable
+fun rememberChatItems(messages: List<ChatMessage>): List<ChatListItem> {
+    return remember(messages) {
+        val result = mutableListOf<ChatListItem>()
+        val threshold = 5 * 60 * 1000
+
+        for (i in messages.indices) {
+            val current = messages[i]
+            if (i == 0 || (current.time - messages[i - 1].time) >= threshold) {
+                result.add(ChatListItem.TimeDivider(current.time.toSmartTime()))
+            }
+            result.add(ChatListItem.MessageItem(current))
+        }
+
+        result
+    }
+}
+
 @Composable
 fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-
+    val chatItems = rememberChatItems(state.messages)
     var activeModal by rememberSaveable { mutableStateOf<ChatScreenModal>(ChatScreenModal.None) }
+
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
@@ -146,10 +172,20 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                 item {
                     Spacer(Modifier.height(0.dp))
                 }
-                items(state.messages.asReversed(), key = { it.id }) { message ->
-                    ChatBubble(
-                        message, modifier = Modifier.animateItem(),
-                        onDelete = { viewModel.deleteMessage(it) })
+                items(chatItems.asReversed(), key = {
+                    when (it) {
+                        is ChatListItem.MessageItem -> "msg_${it.message.id}"
+                        is ChatListItem.TimeDivider -> "time_${it.timeText}"
+                    }
+                }) { item ->
+                    when (item) {
+                        is ChatListItem.MessageItem -> ChatBubble(
+                            item.message,
+                            onDelete = { viewModel.deleteMessage(it) })
+
+                        is ChatListItem.TimeDivider -> TimeDividerLabel(item.timeText)
+                    }
+
                 }
             }
             UserInput(state.userInput) { viewModel.sendMessage(it) }
@@ -182,6 +218,25 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                 else -> {}
             }
         }
+    }
+}
+
+@Composable
+fun TimeDividerLabel(time: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = time,
+            style = MaterialTheme.typography.caption,
+            color = Color.Gray,
+            modifier = Modifier
+//                .background(Color.LightGray.copy(0.2f), CircleShape)
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+        )
     }
 }
 

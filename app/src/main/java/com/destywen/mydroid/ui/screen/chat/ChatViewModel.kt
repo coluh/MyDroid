@@ -85,13 +85,27 @@ class ChatViewModel(
     fun sendMessage(content: String) = viewModelScope.launch {
         val id = chatDao.insertMessage(ChatMessageEntity(role = Role.USER, content = content))
         val messages = chatDao.getAllMessages().first()
-        if (content.contains("全体成员")) {
-            _agents.first().forEach { reply(it, id, messages) }
-            return@launch
+        val agents = _agents.first()
+
+        // time-trigger
+        messages.getOrNull(messages.lastIndex - 1)?.let { m ->
+            if (m.role == Role.ASSISTANT && ((messages.last().timestamp - m.timestamp) < 5 * 60 * 1000)) {
+                agents.find { it.id == m.agentId }?.let {
+                    reply(it, id, messages)
+                    return@launch
+                }
+            }
         }
-        _agents.first().forEach { agent ->
-            if (content.contains(agent.name, ignoreCase = true)) {
-                reply(agent, id, messages)
+
+
+        // keyword-trigger
+        if (content.contains("全体成员")) {
+            agents.forEach { reply(it, id, messages) }
+        } else {
+            agents.forEach { agent ->
+                if (content.contains(agent.name, ignoreCase = true)) {
+                    reply(agent, id, messages)
+                }
             }
         }
     }

@@ -216,7 +216,7 @@ class JournalViewModel(
             })
         }
 
-        val messages = messagesReversed.reversed().joinToString("\n")
+        val messages = messagesReversed.take(40).reversed().joinToString("\n") // 要那么多上下文干嘛
         val user = buildString {
             appendLine("## 历史随笔：")
             appendLine("\n" + messages)

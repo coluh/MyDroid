@@ -1,5 +1,6 @@
 package com.destywen.mydroid
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -45,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
@@ -77,6 +79,7 @@ class ChatActivity : ComponentActivity() {
     }
 }
 
+@SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 fun ChatFloating(initialText: String, service: AiChatService, onDismiss: () -> Unit) {
 
@@ -87,7 +90,8 @@ fun ChatFloating(initialText: String, service: AiChatService, onDismiss: () -> U
     val listState = rememberLazyListState()
     var heightFrac by rememberSaveable { mutableStateOf(0.5f) }
     val density = LocalDensity.current
-    val screenHeight = LocalWindowInfo.current.containerSize.height.dp
+//    val screenHeight = LocalWindowInfo.current.containerSize.height.dp // 实测并不准！！反倒下面的写法准确
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
 
 
     val config = AgentEntity(
@@ -118,7 +122,7 @@ fun ChatFloating(initialText: String, service: AiChatService, onDismiss: () -> U
     }
 
     LaunchedEffect(context.size) {
-        listState.animateScrollToItem(0)
+        listState.animateScrollToItem(context.lastIndex)
     }
 
     Box(

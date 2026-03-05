@@ -22,8 +22,9 @@ data class ChatRequest(
     val n: Int? = null,
     val stop: List<String>? = null,
     @SerialName("enable_thinking")
-    val enableThinking: Boolean? =null
-    // responseFormat
+    val enableThinking: Boolean? =null,
+    @SerialName("response_format")
+    val responseFormat: ResponseFormat? = null,
 )
 
 @Serializable
@@ -32,6 +33,17 @@ data class Message(
     val role: String, // "system" | "user" | "assistant"
     val content: String
 ) : Parcelable
+
+@Serializable
+data class ResponseFormat(
+    val type: String // "text" | "json_object" | "json_schema"
+) {
+    companion object {
+        const val TEXT = "text"
+        const val JSON = "json_object"
+        const val JSON_SCHEMA  = "json_schema"
+    }
+}
 
 /*
 * Non-Streaming Response
