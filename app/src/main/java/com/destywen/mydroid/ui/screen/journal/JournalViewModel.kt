@@ -7,7 +7,6 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.destywen.mydroid.AppContainer
 import com.destywen.mydroid.data.local.AgentEntity
-import com.destywen.mydroid.domain.AppLogger
 import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.ChatDao
 import com.destywen.mydroid.data.local.CommentEntity
@@ -16,6 +15,7 @@ import com.destywen.mydroid.data.local.JournalEntity
 import com.destywen.mydroid.data.local.Role
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.Message
+import com.destywen.mydroid.domain.AppLogger
 import com.destywen.mydroid.domain.FileManager
 import com.destywen.mydroid.util.toDateTime
 import com.destywen.mydroid.util.toDateTimeString
@@ -51,6 +51,7 @@ data class JournalScreenState(
     val hideTags: List<String> = emptyList(),
     val allAgents: List<AgentEntity> = emptyList(),
     val replyAgent: AgentEntity? = null,
+    val visionModalName: String? = null,
     val status: String? = null,
 )
 
@@ -67,7 +68,8 @@ class JournalViewModel(
     private val _status = MutableStateFlow<String?>(null)
 
     private val hideTags = settings.hideTags.map { it?.split(",") ?: emptyList() }
-    private val settingsFlow = combine(hideTags, settings.journalAgentId) { a, b -> Pair(a, b) }
+    private val settingsFlow =
+        combine(hideTags, settings.journalAgentId, settings.vlModel) { a, b, c -> Triple(a, b, c) }
     private val commentsByJournalId = _commentsFlow.map { comments -> comments.groupBy { it.journalId } }
     private val journals = combine(_journalsFlow, commentsByJournalId, _agentsFlow) { journals, commentMap, agents ->
         journals.map { journal ->
@@ -94,7 +96,7 @@ class JournalViewModel(
         _agentsFlow,
         settingsFlow,
         _status
-    ) { journals, agents, (hideTags, replyAgentId), status ->
+    ) { journals, agents, (hideTags, replyAgentId, vlModel), status ->
         JournalScreenState(
             journals = journals.filter { j -> !j.tags.any { it in hideTags } },
             tags = journals.flatMap { j ->
@@ -103,6 +105,7 @@ class JournalViewModel(
             hideTags = hideTags,
             allAgents = agents,
             replyAgent = agents.find { it.id.toString() == replyAgentId },
+            visionModalName = vlModel,
             status = status,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JournalScreenState())
@@ -122,6 +125,7 @@ class JournalViewModel(
             manager.saveImage(uri)
         }
         journalDao.upsertJournal(JournalEntity(content = content, tag = tagString, image = imageName))
+        imageName?.let { generateReply(journalDao.getAllJournals().first()[0].id, true) }
     }
 
     fun updateJournal(id: Int, content: String, tags: List<String>) = viewModelScope.launch {
@@ -186,7 +190,13 @@ class JournalViewModel(
         settings.updateJournalAgentId(id)
     }
 
-    fun generateReply(id: Int) = viewModelScope.launch {
+    fun updateVisionModel(name: String) = viewModelScope.launch {
+        name.takeIf { it.isNotBlank() }?.let {
+            settings.updateVlModel(it)
+        }
+    }
+
+    fun generateReply(id: Int, enableVision: Boolean = false) = viewModelScope.launch {
         if (state.value.replyAgent == null) {
             AppLogger.i("JournalViewModel.generateReply", "agent not set")
             _status.update { "回复模型为空" }
@@ -229,7 +239,8 @@ class JournalViewModel(
         val history = mergeComments(target.comments, user)
 
         _status.update { "调用请求已发送" }
-        service.chat(history, state.value.replyAgent!!)
+        val image = target.image?.let { manager.getImage(it) }.takeIf { enableVision }
+        service.chat(history, state.value.replyAgent!!, image)
             .onSuccess {
                 addAiComment(id, state.value.replyAgent!!.id.toString(), it)
                 _status.update { null }

@@ -63,4 +63,6 @@ class FileManager(private val context: Context) {
         } catch (_: Exception) {
         }
     }
+
+    fun getImage(name: String): File = File(File(context.filesDir, "img"), name)
 }

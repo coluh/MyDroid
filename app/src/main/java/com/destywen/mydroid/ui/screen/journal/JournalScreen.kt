@@ -249,7 +249,7 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                         onEdit = {
                             activeModal = JournalModal.Editor(journal.id, journal.content, journal.tags)
                         }, onGenerate = {
-                            viewModel.generateReply(journal.id)
+                            viewModel.generateReply(journal.id, true)
                         }, onDelete = {
                             viewModel.deleteJournal(journal.id)
                         }, onComment = {
@@ -287,9 +287,15 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                     activeModal = JournalModal.None
                 })
 
-                is JournalModal.Setting -> JournalSetting(state.replyAgent, state.allAgents, onSelect = {
-                    viewModel.selectReplyAgent(it)
-                })
+                is JournalModal.Setting -> JournalSetting(
+                    state.replyAgent,
+                    state.allAgents,
+                    state.visionModalName,
+                    onSelect = {
+                        viewModel.selectReplyAgent(it)
+                    }, onChange = {
+                        viewModel.updateVisionModel(it)
+                    })
 
                 else -> {}
             }
@@ -508,47 +514,59 @@ fun JournalComment(onSend: (String) -> Unit) {
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun JournalSetting(agent: AgentEntity?, allAgents: List<AgentEntity>, onSelect: (id: Long) -> Unit) {
+fun JournalSetting(
+    agent: AgentEntity?,
+    allAgents: List<AgentEntity>,
+    visionModel: String?,
+    onSelect: (id: Long) -> Unit,
+    onChange: (String) -> Unit
+) {
     var expanded by remember { mutableStateOf(false) }
 
-    ExposedDropdownMenuBox(
-        expanded = expanded, onExpandedChange = { expanded = it }, modifier = Modifier
-            .padding(8.dp)
-            .fillMaxWidth()
-    ) {
-        TextField(
-            value = agent?.display ?: "---",
-            onValueChange = {},
-            readOnly = true,
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            singleLine = true,
-            modifier = Modifier.clickable(null, LocalIndication.current) {
-                expanded = true
-            }
-        )
-        ExposedDropdownMenu(
-            expanded = expanded, onDismissRequest = { expanded = false },
-            modifier = Modifier.background(MaterialTheme.colors.background)
+    Column(Modifier
+        .fillMaxWidth()
+        .padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ExposedDropdownMenuBox(
+            expanded = expanded, onExpandedChange = { expanded = it }
         ) {
-            Column(Modifier
-                .fillMaxSize()
-                .padding(8.dp, 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                allAgents.forEach { agent ->
-                    DropdownMenuItem(
-                        onClick = {
-                            expanded = false
-                            onSelect(agent.id)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth(),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        AgentCard(agent, modifier = Modifier.clickable(null, LocalIndication.current) {
-                            onSelect(agent.id)
-                        })
+            TextField(
+                value = agent?.display ?: "---",
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                singleLine = true,
+                modifier = Modifier.clickable(null, LocalIndication.current) {
+                    expanded = true
+                }
+            )
+            ExposedDropdownMenu(
+                expanded = expanded, onDismissRequest = { expanded = false },
+                modifier = Modifier.background(MaterialTheme.colors.background)
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(8.dp, 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    allAgents.forEach { agent ->
+                        DropdownMenuItem(
+                            onClick = {
+                                expanded = false
+                                onSelect(agent.id)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth(),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            AgentCard(agent, modifier = Modifier.clickable(null, LocalIndication.current) {
+                                onSelect(agent.id)
+                            })
+                        }
                     }
                 }
             }
         }
+
+        OutlinedTextField(visionModel ?: "", { onChange(it) }, label = { Text("视觉理解模型") })
     }
 }

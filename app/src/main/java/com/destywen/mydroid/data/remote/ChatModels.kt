@@ -35,6 +35,43 @@ data class Message(
 ) : Parcelable
 
 @Serializable
+data class ChatRequestVision(
+    val model: String,
+    val messages: List<MessageVision>,
+    val stream: Boolean = false,
+    val temperature: Double? = 0.7,
+    @SerialName("top_p")
+    val topP: Double? = null,
+    @SerialName("max_tokens")
+    val maxTokens: Int? = null,
+    val n: Int? = null,
+    val stop: List<String>? = null,
+    @SerialName("enable_thinking")
+    val enableThinking: Boolean? =null,
+    @SerialName("response_format")
+    val responseFormat: ResponseFormat? = null,
+)
+
+@Serializable
+data class MessageVision(
+    val role: String,
+    val content: List<ContentVision>
+)
+
+@Serializable
+data class ContentVision(
+    val type: String, // "text" | "image_url"
+    val text: String? = null,
+    @SerialName("image_url")
+    val imageUrl: ContentImage? = null,
+)
+
+@Serializable
+data class ContentImage(
+    val url: String,
+)
+
+@Serializable
 data class ResponseFormat(
     val type: String // "text" | "json_object" | "json_schema"
 ) {
