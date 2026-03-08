@@ -2,7 +2,6 @@ package com.destywen.mydroid.ui.screen.chat
 
 import android.content.ClipData
 import android.os.Parcelable
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -74,6 +73,7 @@ import com.destywen.mydroid.ui.components.BottomModal
 import com.destywen.mydroid.util.toSmartTime
 import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
+import java.time.LocalDateTime
 
 @Parcelize
 sealed class ChatScreenModal : Parcelable {
@@ -93,11 +93,12 @@ fun rememberChatItems(messages: List<ChatMessage>): List<ChatListItem> {
     return remember(messages) {
         val result = mutableListOf<ChatListItem>()
         val threshold = 5 * 60 * 1000
+        val now = LocalDateTime.now()
 
         for (i in messages.indices) {
             val current = messages[i]
             if (i == 0 || (current.time - messages[i - 1].time) >= threshold) {
-                result.add(ChatListItem.TimeDivider(current.time.toSmartTime()))
+                result.add(ChatListItem.TimeDivider(current.time.toSmartTime(now)))
             }
             result.add(ChatListItem.MessageItem(current))
         }
@@ -163,7 +164,6 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                 reverseLayout = true,
                 modifier = Modifier
                     .weight(1f)
-                    .background(MaterialTheme.colors.surface)
                     .padding(vertical = 4.dp)
                     .pointerInput(Unit) {
                         detectTapGestures(onTap = { focusManager.clearFocus() })
@@ -287,7 +287,7 @@ fun UserInput(text: String? = null, onSend: (String) -> Unit) {
 @Composable
 fun ChatBubble(message: ChatMessage, modifier: Modifier = Modifier, onDelete: (id: Long) -> Unit) {
     val alignment = if (message.isAi) Alignment.Start else Alignment.End
-    val containerColor = if (message.isAi) MaterialTheme.colors.background else MaterialTheme.colors.primary
+    val containerColor = if (message.isAi) MaterialTheme.colors.surface else MaterialTheme.colors.primary
 
     var expanded by remember { mutableStateOf(false) }
     val clipboard = LocalClipboard.current

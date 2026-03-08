@@ -51,6 +51,8 @@ import com.destywen.mydroid.ui.screen.journal.JournalScreen
 import com.destywen.mydroid.ui.screen.journal.JournalViewModel
 import com.destywen.mydroid.ui.screen.log.LogScreen
 import com.destywen.mydroid.ui.screen.log.LogViewModel
+import com.destywen.mydroid.ui.screen.schedule.ScheduleScreen
+import com.destywen.mydroid.ui.screen.schedule.ScheduleViewModel
 import kotlinx.coroutines.launch
 
 enum class Screen(val label: Int, val icon: ImageVector) {
@@ -124,6 +126,11 @@ fun MainApp(container: AppContainer) {
             Screen.CHAT -> {
                 val viewModel: ChatViewModel = viewModel(factory = ChatViewModel.Factory(container))
                 ChatScreen(viewModel) { scope.launch { drawerState.open() } }
+            }
+
+            Screen.SCHEDULE -> {
+                val viewModel: ScheduleViewModel = viewModel(factory = ScheduleViewModel.Factory(container))
+                ScheduleScreen(viewModel) { scope.launch { drawerState.open() } }
             }
 
             Screen.LOG -> {

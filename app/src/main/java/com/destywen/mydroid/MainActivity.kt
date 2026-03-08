@@ -14,6 +14,7 @@ import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.ChatDao
 import com.destywen.mydroid.data.local.JournalDao
 import com.destywen.mydroid.data.local.LogDao
+import com.destywen.mydroid.data.local.ScheduleDao
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.NetworkModule
 import com.destywen.mydroid.domain.FileManager
@@ -43,12 +44,13 @@ class AppContainer(private val context: Context) {
 
     val database: AppDatabase by lazy {
         Room.databaseBuilder(context, AppDatabase::class.java, "mydroid.db")
-            .addMigrations(migration1to2, migration2to3, migration3to4, migration4to5, migration5to6)
+            .addMigrations(migration1to2, migration2to3, migration3to4, migration4to5, migration5to6, migration6to7)
             .build()
     }
     val journalDao: JournalDao get() = database.journalDao()
     val chatDao: ChatDao get() = database.chatDao()
     val logDao: LogDao get() = database.logDao()
+    val scheduleDao: ScheduleDao get() = database.scheduleDao()
 
     val settings: AppSettings by lazy {
         AppSettings(context)
@@ -92,7 +94,8 @@ class AppContainer(private val context: Context) {
 
     val migration4to5 = object : Migration(4, 5) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("""
+            db.execSQL(
+                """
                 CREATE TABLE IF NOT EXISTS `chat_agents` (
                     `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                     `name` TEXT NOT NULL,
@@ -103,10 +106,12 @@ class AppContainer(private val context: Context) {
                     `temperature` REAL NOT NULL,
                     `createdAt` INTEGER NOT NULL
                 )
-            """.trimIndent())
+            """.trimIndent()
+            )
 
             db.execSQL("DROP TABLE chat_messages")
-            db.execSQL("""
+            db.execSQL(
+                """
                 CREATE TABLE IF NOT EXISTS `chat_messages` (
                     `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                     `agentId` INTEGER,
@@ -115,13 +120,31 @@ class AppContainer(private val context: Context) {
                     `timestamp` INTEGER NOT NULL,
                     FOREIGN KEY(`agentId`) REFERENCES `chat_agents`(`id`) ON UPDATE NO ACTION ON DELETE NO ACTION
                 )
-            """.trimIndent())
+            """.trimIndent()
+            )
         }
     }
 
     val migration5to6 = object : Migration(5, 6) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("CREATE INDEX IF NOT EXISTS index_chat_messages_agentId ON chat_messages(agentId)")
+        }
+    }
+
+    val migration6to7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `schedules` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `description` TEXT,
+                    `due` INTEGER,
+                    `isCompleted` INTEGER NOT NULL DEFAULT 0,
+                    `createdAt` INTEGER NOT NULL
+                )
+            """.trimIndent()
+            )
         }
     }
 }
