@@ -97,7 +97,6 @@ class ChatViewModel(
             }
         }
 
-
         // keyword-trigger
         if (content.contains("全体成员")) {
             agents.forEach { reply(it, id, messages) }

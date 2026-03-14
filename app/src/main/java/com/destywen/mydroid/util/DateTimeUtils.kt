@@ -47,7 +47,7 @@ fun Long.toShortTime(ref: LocalDateTime? = null): String {
             else -> DateTimeFormatter.ofPattern("yyyy-MM-dd")
         }
         else -> when {
-            target.toLocalDate() == now.toLocalDate() -> return "HH:mm"
+            target.toLocalDate() == now.toLocalDate() -> DateTimeFormatter.ofPattern("HH:mm")
             target.year == now.year -> DateTimeFormatter.ofPattern("MM-dd HH:mm")
             else -> DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
         }
