@@ -65,4 +65,10 @@ class FileManager(private val context: Context) {
     }
 
     fun getImage(name: String): File = File(File(context.filesDir, "img"), name)
+
+    fun readFile(uri: Uri): String? {
+        return context.contentResolver.openInputStream(uri)?.use { stream ->
+            stream.bufferedReader().use { it.readText() }
+        }
+    }
 }

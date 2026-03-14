@@ -19,6 +19,8 @@ import com.destywen.mydroid.domain.AppLogger
 import com.destywen.mydroid.domain.FileManager
 import com.destywen.mydroid.util.toDateTime
 import com.destywen.mydroid.util.toDateTimeString
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -27,6 +29,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlin.random.Random
 
 data class Comment(
     val id: Int,
@@ -53,6 +58,8 @@ data class JournalScreenState(
     val replyAgent: AgentEntity? = null,
     val visionModalName: String? = null,
     val status: String? = null,
+    val importing: Int? = null,
+    val importingTotal: Int? = null,
 )
 
 class JournalViewModel(
@@ -66,11 +73,15 @@ class JournalViewModel(
     private val _commentsFlow = journalDao.getAllComments()
     private val _agentsFlow = chatDao.getAgents()
     private val _status = MutableStateFlow<String?>(null)
+    private val _importing = MutableStateFlow<Int?>(null)
+    private val _importingTotal = MutableStateFlow<Int?>(null)
 
     private val hideTags = settings.hideTags.map { it?.split(",") ?: emptyList() }
     private val settingsFlow =
         combine(hideTags, settings.journalAgentId, settings.vlModel) { a, b, c -> Triple(a, b, c) }
     private val commentsByJournalId = _commentsFlow.map { comments -> comments.groupBy { it.journalId } }
+    private val importStatus = combine(_importing, _importingTotal) { a, b -> Pair(a, b) }
+
     private val journals = combine(_journalsFlow, commentsByJournalId, _agentsFlow) { journals, commentMap, agents ->
         journals.map { journal ->
             Journal(
@@ -82,7 +93,7 @@ class JournalViewModel(
                     val name = if (c.role == Role.USER) {
                         c.name
                     } else {
-                        agents.find { it.id.toString() == c.name }?.name ?: "LLM-${c.name.take(6)}"
+                        agents.find { it.id.toString() == c.name }?.name ?: c.name.take(6)
                     }
                     Comment(c.id, name, c.role, c.content, c.time)
                 },
@@ -95,8 +106,9 @@ class JournalViewModel(
         journals,
         _agentsFlow,
         settingsFlow,
-        _status
-    ) { journals, agents, (hideTags, replyAgentId, vlModel), status ->
+        _status,
+        importStatus,
+    ) { journals, agents, (hideTags, replyAgentId, vlModel), status, (importing, total) ->
         JournalScreenState(
             journals = journals.filter { j -> !j.tags.any { it in hideTags } },
             tags = journals.flatMap { j ->
@@ -107,6 +119,8 @@ class JournalViewModel(
             replyAgent = agents.find { it.id.toString() == replyAgentId },
             visionModalName = vlModel,
             status = status,
+            importing = importing,
+            importingTotal = total,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JournalScreenState())
 
@@ -271,6 +285,84 @@ class JournalViewModel(
             result.removeAt(result.lastIndex)
         }
         return result
+    }
+
+    fun loadOldJournals(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+        _importing.update { 0 }
+
+        val oldJournals = mutableListOf<Journal>()
+
+        val tableJson = manager.readFile(uri)
+        if (tableJson == null) {
+            _status.update { "fail to open file" }
+            _importing.update { null }
+            return@launch
+        }
+
+        @Serializable
+        data class OldJournal(
+            val _id: Long,
+            val image: String,
+            val text: String,
+            val timestamp: Long,
+        )
+
+        @Serializable
+        data class OldMessage(val role: String, val content: String)
+
+        val items = Json.decodeFromString<List<OldJournal>>(tableJson)
+        _importingTotal.update { items.size }
+        val username = settings.username.first()
+        items.forEach { item ->
+            var content = item.text
+            var comments = emptyList<Comment>()
+            if (item.text.startsWith("[")) {
+                val messages = Json.decodeFromString<List<OldMessage>>(item.text)
+                content = messages.first().content
+                comments = messages.drop(1).map {
+                    val role = if (it.role == "user" || it.role == "用户") Role.USER else Role.ASSISTANT
+                    val name = if (role == Role.USER) username else "LLM"
+                    Comment(0, name, role, it.content, 0)
+                }
+            }
+            oldJournals.add(
+                Journal(
+                    image = item.image.takeIf { it.isNotBlank() },
+                    timestamp = item.timestamp,
+                    content = content,
+                    comments = comments,
+                    id = 0,
+                    tags = emptyList(),
+                )
+            )
+            _importing.update { oldJournals.size }
+        }
+
+        // add to database
+        oldJournals.forEachIndexed { idx, journal ->
+            val id = journalDao.upsertJournal(
+                JournalEntity(
+                    content = journal.content,
+                    image = journal.image,
+                    time = journal.timestamp
+                )
+            )
+            journal.comments.forEach { comment ->
+                journalDao.insertComment(
+                    CommentEntity(
+                        journalId = id.toInt(),
+                        name = comment.name,
+                        role = comment.role,
+                        content = comment.content,
+                        time = journal.timestamp
+                    )
+                )
+            }
+            _importing.update { idx + 1 }
+        }
+
+        _importing.update { null }
+        AppLogger.i("loadOldJournals", "load ${oldJournals.size} journals")
     }
 
     companion object {

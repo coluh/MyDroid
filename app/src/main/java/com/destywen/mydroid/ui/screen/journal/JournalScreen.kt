@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,6 +46,7 @@ import androidx.compose.material.ExposedDropdownMenuDefaults
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
+import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Scaffold
@@ -113,6 +115,12 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
     val snackbarHostState = remember { SnackbarHostState() }
     val username = stringResource(R.string.username)
 
+    val importLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) {
+        it?.let {
+            viewModel.loadOldJournals(it)
+        }
+    }
+
     val filteredJournals = remember(state.journals, query) {
         if (query.isNullOrBlank()) {
             state.journals
@@ -171,6 +179,10 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                             showHideTags = !showHideTags
                             expanded = false
                         }) { Text(if (showHideTags) "收起" else "展开") }
+                        DropdownMenuItem(onClick = {
+                            importLauncher.launch("application/json")
+                            expanded = false
+                        }) { Text("导入") }
                     }
                 })
         },
@@ -298,6 +310,31 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                     })
 
                 else -> {}
+            }
+        }
+
+        if (state.importing != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(32.dp)) {
+                    val progress = if (state.importingTotal == null || state.importingTotal == 0) 0f else {
+                        state.importing!!.toFloat() / state.importingTotal!!
+                    }
+                    Column(Modifier.padding(32.dp, 16.dp)) {
+                        Text("已加载 ${state.importing} / ${state.importingTotal}")
+                        Spacer(Modifier.height(16.dp))
+                        LinearProgressIndicator(
+                            progress = progress,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             }
         }
     }
@@ -523,9 +560,11 @@ fun JournalSetting(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    Column(Modifier
-        .fillMaxWidth()
-        .padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         ExposedDropdownMenuBox(
             expanded = expanded, onExpandedChange = { expanded = it }
         ) {

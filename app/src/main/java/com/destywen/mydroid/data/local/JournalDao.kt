@@ -47,10 +47,10 @@ interface JournalDao {
     fun getAllComments(): Flow<List<CommentEntity>>
 
     @Upsert
-    suspend fun upsertJournal(journal: JournalEntity)
+    suspend fun upsertJournal(journal: JournalEntity): Long
 
     @Insert
-    suspend fun insertComment(comment: CommentEntity)
+    suspend fun insertComment(comment: CommentEntity): Long
 
     @Query("DELETE FROM journals WHERE id = :id")
     suspend fun deleteJournal(id: Int)
