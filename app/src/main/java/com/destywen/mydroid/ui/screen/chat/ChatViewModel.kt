@@ -217,6 +217,10 @@ class ChatViewModel(
         apiKey?.takeIf { it.isNotBlank() }?.let { settings.updateDefaultApiKey(it) }
     }
 
+    fun clearMessages() = viewModelScope.launch {
+        chatDao.clearMessage()
+    }
+
     companion object {
         fun Factory(container: AppContainer) = viewModelFactory {
             initializer {

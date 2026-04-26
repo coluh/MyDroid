@@ -146,6 +146,10 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                                 expanded = false
                                 activeModal = ChatScreenModal.Agents(state.allAgents)
                             }) { Text("列表") }
+                            DropdownMenuItem({
+                                expanded = false
+                                viewModel.clearMessages()
+                            }) { Text("清空") }
                         }
                     }
                 }
