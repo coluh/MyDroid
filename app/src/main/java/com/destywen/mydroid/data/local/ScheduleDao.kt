@@ -17,8 +17,16 @@ data class ScheduleEntity(
     val description: String? = null,
     val due: Long? = null,
     val isCompleted: Boolean = false,
+    val groupId: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
 ) : Parcelable
+
+@Entity(tableName = "schedule_groups")
+data class ScheduleGroupEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val createdAt: Long = System.currentTimeMillis(),
+)
 
 @Dao
 interface ScheduleDao {
@@ -31,4 +39,16 @@ interface ScheduleDao {
 
     @Query("DELETE FROM schedules WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("SELECT * FROM schedule_groups ORDER BY createdAt")
+    fun getAllGroups(): Flow<List<ScheduleGroupEntity>>
+
+    @Upsert
+    suspend fun upsertGroup(group: ScheduleGroupEntity)
+
+    @Query("DELETE FROM schedule_groups WHERE id = :id")
+    suspend fun deleteGroupById(id: Long)
+
+    @Query("UPDATE schedules SET groupId = NULL WHERE groupId = :groupId")
+    suspend fun clearGroupFromSchedules(groupId: Long)
 }

@@ -44,7 +44,7 @@ class AppContainer(private val context: Context) {
 
     val database: AppDatabase by lazy {
         Room.databaseBuilder(context, AppDatabase::class.java, "mydroid.db")
-            .addMigrations(migration1to2, migration2to3, migration3to4, migration4to5, migration5to6, migration6to7)
+            .addMigrations(migration1to2, migration2to3, migration3to4, migration4to5, migration5to6, migration6to7, migration7to8)
             .build()
     }
     val journalDao: JournalDao get() = database.journalDao()
@@ -145,6 +145,21 @@ class AppContainer(private val context: Context) {
                 )
             """.trimIndent()
             )
+        }
+    }
+
+    val migration7to8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `schedule_groups` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL
+                )
+            """.trimIndent()
+            )
+            db.execSQL("ALTER TABLE `schedules` ADD COLUMN `groupId` INTEGER DEFAULT NULL")
         }
     }
 }
