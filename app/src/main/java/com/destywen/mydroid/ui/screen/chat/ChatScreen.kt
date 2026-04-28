@@ -55,7 +55,7 @@ import com.destywen.mydroid.ui.components.AgentCard
 
 
 @Composable
-fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
+fun ChatScreen(viewModel: ChatViewModel, onNavigateConv: (Long) -> Unit, onDrawer: () -> Unit) {
 
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -67,7 +67,7 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigate: () -> Unit) {
                 windowInsets = AppBarDefaults.topAppBarWindowInsets,
                 title = { Text(stringResource(R.string.chat)) },
                 navigationIcon = {
-                    IconButton({ onNavigate() }) { Icon(Icons.Default.Menu, null) }
+                    IconButton({ onDrawer() }) { Icon(Icons.Default.Menu, null) }
                 },
                 actions = {
                 }
