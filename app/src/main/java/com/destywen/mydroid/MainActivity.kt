@@ -17,6 +17,7 @@ import com.destywen.mydroid.data.local.LogDao
 import com.destywen.mydroid.data.local.ScheduleDao
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.NetworkModule
+import com.destywen.mydroid.domain.ChatRepository
 import com.destywen.mydroid.domain.FileManager
 import com.destywen.mydroid.ui.screen.MainApp
 import com.destywen.mydroid.ui.theme.MyDroidTheme
@@ -44,11 +45,17 @@ class AppContainer(private val context: Context) {
 
     val database: AppDatabase by lazy {
         Room.databaseBuilder(context, AppDatabase::class.java, "mydroid.db")
-            .addMigrations(migration1to2, migration2to3, migration3to4, migration4to5, migration5to6, migration6to7, migration7to8)
+            .addMigrations(
+                migration1to2, migration2to3, migration3to4, migration4to5,
+                migration5to6, migration6to7, migration7to8, migration8to9
+            )
             .build()
     }
     val journalDao: JournalDao get() = database.journalDao()
     val chatDao: ChatDao get() = database.chatDao()
+    val chatRepository: ChatRepository by lazy {
+        ChatRepository(chatDao)
+    }
     val logDao: LogDao get() = database.logDao()
     val scheduleDao: ScheduleDao get() = database.scheduleDao()
 
@@ -160,6 +167,82 @@ class AppContainer(private val context: Context) {
             """.trimIndent()
             )
             db.execSQL("ALTER TABLE `schedules` ADD COLUMN `groupId` INTEGER DEFAULT NULL")
+        }
+    }
+
+    val migration8to9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `users` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `avatar` TEXT,
+                    `createdAt` INTEGER NOT NULL
+                )
+            """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `conversations` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `targetId` INTEGER,
+                    `title` TEXT,
+                    `avatar` TEXT,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL
+                )
+            """.trimIndent()
+            )
+
+            // 3. group_members 表（联合主键）
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `group_members` (
+                    `convId` INTEGER NOT NULL,
+                    `userId` INTEGER NOT NULL,
+                    `joinedAt` INTEGER NOT NULL,
+                    PRIMARY KEY (`convId`, `userId`)
+                )
+            """.trimIndent()
+            )
+
+            // 4. messages 表（带索引）
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `messages` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `convId` INTEGER NOT NULL,
+                    `senderId` INTEGER NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `content` TEXT NOT NULL,
+                    `timestamp` INTEGER NOT NULL,
+                    `replyToMsgId` INTEGER,
+                    `forwardFromMsgId` INTEGER,
+                    `forwardFromConvId` INTEGER
+                )
+            """.trimIndent()
+            )
+
+            // messages 表的索引
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_messages_convId` ON `messages` (`convId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_messages_senderId` ON `messages` (`senderId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_conv_time` ON `messages` (`convId`, `timestamp`)")
+
+            // 5. attachments 表（带外键）
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `attachments` (
+                    `attachmentId` TEXT NOT NULL PRIMARY KEY,
+                    `messageId` INTEGER NOT NULL,
+                    `filePath` TEXT NOT NULL,
+                    `mimeType` TEXT NOT NULL,
+                    `size` INTEGER NOT NULL
+                )
+            """.trimIndent()
+            )
         }
     }
 }
