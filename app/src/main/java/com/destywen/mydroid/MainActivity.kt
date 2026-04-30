@@ -47,7 +47,7 @@ class AppContainer(private val context: Context) {
         Room.databaseBuilder(context, AppDatabase::class.java, "mydroid.db")
             .addMigrations(
                 migration1to2, migration2to3, migration3to4, migration4to5,
-                migration5to6, migration6to7, migration7to8, migration8to9
+                migration5to6, migration6to7, migration7to8, migration8to9, migration9to10
             )
             .build()
     }
@@ -244,6 +244,34 @@ class AppContainer(private val context: Context) {
                 )
             """.trimIndent()
             )
+        }
+    }
+
+    val migration9to10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE group_members RENAME TO members")
+            db.execSQL("ALTER TABLE members ADD COLUMN unread INTEGER NOT NULL DEFAULT 0")
+
+            db.execSQL(
+                """
+                CREATE TABLE conversations_new (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `title` TEXT,
+                    `avatar` TEXT,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL
+                )
+            """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO conversations_new (id, type, title, avatar, createdAt, updatedAt)
+                    SELECT id, type, title, avatar, createdAt, updatedAt FROM conversations
+            """.trimIndent()
+            )
+            db.execSQL("DROP TABLE conversations")
+            db.execSQL("ALTER TABLE conversations_new RENAME TO conversations")
         }
     }
 }

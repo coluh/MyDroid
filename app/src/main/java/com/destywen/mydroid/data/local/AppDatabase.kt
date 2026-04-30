@@ -7,9 +7,9 @@ import androidx.room.RoomDatabase
     entities = [
         JournalEntity::class, CommentEntity::class, AgentEntity::class, ChatMessageEntity::class, LogEntity::class,
         ScheduleEntity::class, ScheduleGroupEntity::class, UserEntity::class,
-        ConversationEntity::class, GroupMemberEntity::class, MessageEntity::class, AttachmentEntity::class
+        ConversationEntity::class, MemberEntity::class, MessageEntity::class, AttachmentEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

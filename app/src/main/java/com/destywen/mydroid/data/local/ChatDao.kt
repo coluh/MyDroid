@@ -26,21 +26,19 @@ data class UserEntity(
 data class ConversationEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val type: String, // "private" | "group"
-    val targetId: Long?, // used for type == "private"
     val title: String?, // used for type == "group"
     val avatar: String?, // used for type == "group"
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long,
 )
 
-// TODO: rename to members, store private convs
 @Entity(
-    tableName = "group_members", primaryKeys = ["convId", "userId"]
+    tableName = "members", primaryKeys = ["convId", "userId"]
 )
-data class GroupMemberEntity(
+data class MemberEntity(
     val convId: Long,
     val userId: Long,
-    // TODO: val unread: Int,
+    val unread: Int,
     val joinedAt: Long = System.currentTimeMillis(),
 )
 
@@ -128,18 +126,27 @@ interface ChatDao {
     suspend fun deleteMessagesByConversation(convId: Long)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun addGroupMember(member: GroupMemberEntity)
+    suspend fun addMember(member: MemberEntity)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun addGroupMembers(members: List<GroupMemberEntity>)
+    suspend fun addMembers(members: List<MemberEntity>)
 
-    @Query("SELECT * FROM group_members WHERE convId = :convId")
-    fun getGroupMembers(convId: Long): Flow<List<GroupMemberEntity>>
+    @Update
+    suspend fun updateMember(member: MemberEntity)
 
-    @Query("DELETE FROM group_members WHERE convId = :convId AND userId = :userId")
-    suspend fun removeGroupMember(convId: Long, userId: Long)
+    @Query("UPDATE members SET unread = unread + 1 WHERE convId = :convId AND userId != :senderId")
+    suspend fun incrementUnread(convId: Long, senderId: Long)
 
-    @Query("DELETE FROM group_members WHERE convId = :convId")
+    @Query("SELECT * FROM members WHERE convId = :convId")
+    fun getMembers(convId: Long): Flow<List<MemberEntity>>
+
+    @Query("SELECT * FROM members")
+    fun getAllMembers(): Flow<List<MemberEntity>>
+
+    @Query("DELETE FROM members WHERE convId = :convId AND userId = :userId")
+    suspend fun removeMember(convId: Long, userId: Long)
+
+    @Query("DELETE FROM members WHERE convId = :convId")
     suspend fun removeAllMembers(convId: Long)
 
     @Insert

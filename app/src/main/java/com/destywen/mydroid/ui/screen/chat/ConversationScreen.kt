@@ -25,7 +25,9 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,7 +49,7 @@ import java.nio.file.WatchEvent
 import java.time.LocalDateTime
 
 @Composable
-fun ConversationScreen(viewModel: ChatViewModel, convId: Long, onDrawer: () -> Unit) {
+fun ConversationScreen(viewModel: ChatViewModel, convId: Long, onBack: () -> Unit) {
     val messages by viewModel.getMessages(convId).collectAsStateWithLifecycle()
     val messageItems = rememberMessageItems(messages)
     val users by viewModel.users.collectAsStateWithLifecycle()
@@ -63,15 +65,11 @@ fun ConversationScreen(viewModel: ChatViewModel, convId: Long, onDrawer: () -> U
                 windowInsets = AppBarDefaults.topAppBarWindowInsets,
                 title = { Text(error ?: stringResource(R.string.chat)) },
                 navigationIcon = {
-                    IconButton({ onDrawer() }) { Icon(Icons.Default.Menu, null) }
+                    IconButton({ onBack() }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null) }
                 },
                 actions = {
-                    var expanded by remember { mutableStateOf(false) }
-                    IconButton(onClick = { expanded = true }) {
-                        Icon(Icons.Default.Add, null)
-                    }
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        ;
+                    IconButton(onClick = { }) {
+                        Icon(Icons.Default.Menu, null)
                     }
                 }
             )

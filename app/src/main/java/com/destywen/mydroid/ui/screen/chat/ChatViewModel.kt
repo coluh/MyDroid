@@ -35,6 +35,7 @@ class ChatViewModel(
         repository.getAllConversations().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val users: StateFlow<List<UserEntity>> =
         repository.getUsers().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val selfId: StateFlow<Long?> = settings.userId.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val error = MutableStateFlow<String?>(null)
 
     fun getMessages(convId: Long): StateFlow<List<Message>> =
@@ -58,6 +59,10 @@ class ChatViewModel(
             return@launch
         }
         repository.sendTextMessage(convId, userId, content)
+    }
+
+    fun clear() = viewModelScope.launch {
+        repository.clear()
     }
 
     companion object {

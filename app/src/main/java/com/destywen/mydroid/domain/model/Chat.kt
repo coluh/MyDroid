@@ -7,7 +7,6 @@ enum class ConversationType {
 data class Conversation(
     val id: Long,
     val type: ConversationType,
-    val targetId: Long?, // if type is PRIVATE
     val title: String,
     val avatar: String?,
     val lastMessagePreview: String?,

@@ -145,7 +145,7 @@ fun MainApp(container: AppContainer) {
                 popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right) },
             ) {
                 val convId = it.arguments?.getLong("convId") ?: 0L
-                ConversationScreen(chatViewModel, convId, { scope.launch { drawerState.open() } })
+                ConversationScreen(chatViewModel, convId, { navController.popBackStack() })
             }
         }
     }

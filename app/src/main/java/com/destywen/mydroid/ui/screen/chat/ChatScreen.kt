@@ -74,6 +74,10 @@ sealed class ChatModal : Parcelable {
 fun ChatScreen(viewModel: ChatViewModel, onNavigateConv: (Long) -> Unit, onDrawer: () -> Unit) {
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
     val users by viewModel.users.collectAsStateWithLifecycle()
+    val selfId by viewModel.selfId.collectAsStateWithLifecycle()
+    val selfUser = remember(users, selfId) {
+        users.find { it.id == selfId }
+    }
     var activeModal by rememberSaveable { mutableStateOf<ChatModal>(ChatModal.None) }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -88,6 +92,9 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigateConv: (Long) -> Unit, onDrawe
                 },
                 actions = {
                     var expanded by remember { mutableStateOf(false) }
+                    selfUser?.let {
+                        Avatar(it.avatar, it.name, 40)
+                    }
                     IconButton(onClick = { expanded = true }) {
                         Icon(Icons.Default.Add, null)
                     }
@@ -103,6 +110,10 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigateConv: (Long) -> Unit, onDrawe
                         DropdownMenuItem(onClick = {
                             expanded = false
                         }) { Text("创建群聊") }
+                        DropdownMenuItem(onClick = {
+                            viewModel.clear()
+                            expanded = false
+                        }) { Text("clear") }
                     }
                 }
             )

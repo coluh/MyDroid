@@ -3,6 +3,7 @@ package com.destywen.mydroid.domain
 import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.ChatDao
 import com.destywen.mydroid.data.local.ConversationEntity
+import com.destywen.mydroid.data.local.MemberEntity
 import com.destywen.mydroid.data.local.MessageEntity
 import com.destywen.mydroid.data.local.UserEntity
 import com.destywen.mydroid.domain.model.Conversation
@@ -12,32 +13,51 @@ import com.destywen.mydroid.domain.model.MessageType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 
 class ChatRepository(private val chatDao: ChatDao, private val settings: AppSettings) {
     fun getAllConversations(): Flow<List<Conversation>> {
         return combine(
             chatDao.getAllConversations(),
+            chatDao.getAllMembers(),
             chatDao.getAllUsers(),
             chatDao.getLatestMessagesPerConv(),
-        ) { convs, users, latestMessages ->
-            val userNameMap = users.associate { it.id to it.name }
-            val userAvatarMap = users.associate { it.id to it.avatar }
+            settings.userId,
+        ) { convs, members, users, latestMessages, selfId ->
             val latestMsgMap = latestMessages.associateBy { it.convId }
-            convs.map { conv ->
-                val type = if (conv.type == "private") ConversationType.PRIVATE else ConversationType.GROUP
-                val title = conv.title ?: userNameMap[conv.targetId]
-                val avatar = conv.avatar ?: userAvatarMap[conv.targetId]
-                Conversation(
-                    id = conv.id,
-                    type = type,
-                    targetId = conv.targetId,
-                    title = title ?: "undefined",
-                    avatar = avatar,
-                    lastMessagePreview = latestMsgMap[conv.id]?.content,
-                    lastMessageTime = latestMsgMap[conv.id]?.timestamp ?: conv.createdAt,
-                    unreadCount = 123,
-                )
+            convs.mapNotNull { conv ->
+                val convMembers = members.filter { it.convId == conv.id }
+                val unreadCount = convMembers.find { it.userId == selfId }?.unread ?: 0
+                val latestMsg = latestMsgMap[conv.id]
+
+                when (conv.type) {
+                    "private" -> {
+                        val otherMember = convMembers.firstOrNull { it.userId != selfId } ?: convMembers.firstOrNull()
+                        val otherUser = users.find { it.id == otherMember?.userId }
+                        Conversation(
+                            id = conv.id,
+                            type = ConversationType.PRIVATE,
+                            title = otherUser?.name ?: "?",
+                            avatar = otherUser?.avatar,
+                            lastMessagePreview = latestMsg?.content,
+                            lastMessageTime = latestMsg?.timestamp ?: conv.updatedAt,
+                            unreadCount = unreadCount,
+                        )
+                    }
+
+                    "group" -> {
+                        Conversation(
+                            id = conv.id,
+                            type = ConversationType.GROUP,
+                            title = conv.title ?: "?",
+                            avatar = conv.avatar,
+                            lastMessagePreview = latestMsg?.content,
+                            lastMessageTime = latestMsg?.timestamp ?: conv.createdAt,
+                            unreadCount = unreadCount,
+                        )
+                    }
+
+                    else -> null
+                }
             }
         }
     }
@@ -48,18 +68,25 @@ class ChatRepository(private val chatDao: ChatDao, private val settings: AppSett
             avatar = avatar,
         )
         val userId = chatDao.insertUser(user)
+        if (settings.userId.first() == null || settings.userId.first() == 0L) {
+            settings.updateUserId(userId)
+        }
 
-        // create conversation
+        // create private conversation
         val current = System.currentTimeMillis()
         val conversation = ConversationEntity(
             type = "private",
-            targetId = userId,
             title = null,
             avatar = null,
             createdAt = current,
             updatedAt = current,
         )
-        chatDao.insertConversation(conversation)
+        val convId = chatDao.insertConversation(conversation)
+        chatDao.addMember(MemberEntity(convId, userId, 0, current))
+        val selfId = settings.userId.first()!!
+        if (userId != selfId) {
+            chatDao.addMember(MemberEntity(convId, selfId, 0, current))
+        }
     }
 
     fun getMessages(convId: Long): Flow<List<Message>> {
@@ -96,10 +123,29 @@ class ChatRepository(private val chatDao: ChatDao, private val settings: AppSett
             content = content,
         )
         chatDao.insertMessage(message)
-        // update time and TODO: unread
+        // update time and  unread
         val conv = chatDao.getConversation(convId).copy(
             updatedAt = message.timestamp
         )
         chatDao.updateConversation(conv)
+        chatDao.incrementUnread(convId, senderId)
+    }
+
+    suspend fun clear() {
+        val convs = chatDao.getAllConversations().first()
+        convs.forEach { conv ->
+            val messages = chatDao.getMessagesByConversation(conv.id).first()
+            messages.forEach { message ->
+                chatDao.deleteMessage(message)
+            }
+            chatDao.deleteConversation(conv)
+        }
+        chatDao.getAllUsers().first().forEach { user ->
+            chatDao.deleteUser(user)
+        }
+        chatDao.getAllMembers().first().forEach { member ->
+            chatDao.removeMember(member.convId, member.userId)
+        }
+        settings.updateUserId(0)
     }
 }
