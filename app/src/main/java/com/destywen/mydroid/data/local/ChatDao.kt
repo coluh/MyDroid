@@ -11,7 +11,6 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Update
-import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 import kotlinx.parcelize.Parcelize
 
@@ -27,19 +26,21 @@ data class UserEntity(
 data class ConversationEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val type: String, // "private" | "group"
-    val targetId: Long?,
-    val title: String?,
-    val avatar: String?,
-    val createdAt: Long,
+    val targetId: Long?, // used for type == "private"
+    val title: String?, // used for type == "group"
+    val avatar: String?, // used for type == "group"
+    val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long,
 )
 
+// TODO: rename to members, store private convs
 @Entity(
     tableName = "group_members", primaryKeys = ["convId", "userId"]
 )
 data class GroupMemberEntity(
     val convId: Long,
     val userId: Long,
+    // TODO: val unread: Int,
     val joinedAt: Long = System.currentTimeMillis(),
 )
 
@@ -99,6 +100,9 @@ interface ChatDao {
     @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
     fun getAllConversations(): Flow<List<ConversationEntity>>
 
+    @Query("SELECT * FROM conversations WHERE id = :id")
+    suspend fun getConversation(id: Long) : ConversationEntity
+
     @Insert
     suspend fun insertMessage(message: MessageEntity): Long
 
@@ -110,6 +114,15 @@ interface ChatDao {
 
     @Query("SELECT * FROM messages WHERE convId = :convId ORDER BY timestamp ASC")
     fun getMessagesByConversation(convId: Long): Flow<List<MessageEntity>>
+
+    @Query(
+        """
+        SELECT * FROM messages WHERE (convId, timestamp) IN (
+            SELECT convId, MAX(timestamp) FROM messages GROUP BY convId
+        )
+    """
+    )
+    fun getLatestMessagesPerConv(): Flow<List<MessageEntity>>
 
     @Query("DELETE FROM messages WHERE convId = :convId")
     suspend fun deleteMessagesByConversation(convId: Long)

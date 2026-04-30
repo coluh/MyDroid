@@ -2,6 +2,7 @@ package com.destywen.mydroid.data.local
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.map
@@ -13,6 +14,7 @@ class AppSettings(private val context: Context) {
     private object Keys {
         // info
         val USERNAME = stringPreferencesKey("username")
+        val USER_ID = longPreferencesKey("user_id") // used in chat
 
         // journal page
         val HIDE_TAGS = stringPreferencesKey("hide_tags")
@@ -25,6 +27,7 @@ class AppSettings(private val context: Context) {
     }
 
     val username = context.dataStore.data.map { it[Keys.USERNAME]?:"Destywen" }
+    val userId = context.dataStore.data.map { it[Keys.USER_ID] }
     val hideTags = context.dataStore.data.map { it[Keys.HIDE_TAGS] }
     val journalAgentId = context.dataStore.data.map { it[Keys.JOURNAL_AGENT_ID] }
     val vlModel = context.dataStore.data.map { it[Keys.VL_MODEL] }
@@ -32,6 +35,8 @@ class AppSettings(private val context: Context) {
     val defaultApiKey = context.dataStore.data.map { it[Keys.DEFAULT_API_KEY] }
 
     suspend fun updateUsername(name: String) = context.dataStore.edit { it[Keys.USERNAME] = name }
+
+    suspend fun updateUserId(id: Long) = context.dataStore.edit { it[Keys.USER_ID] = id }
 
     suspend fun updateHideTags(tags: String) = context.dataStore.edit { it[Keys.HIDE_TAGS] = tags }
 

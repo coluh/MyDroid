@@ -53,14 +53,15 @@ class AppContainer(private val context: Context) {
     }
     val journalDao: JournalDao get() = database.journalDao()
     val chatDao: ChatDao get() = database.chatDao()
-    val chatRepository: ChatRepository by lazy {
-        ChatRepository(chatDao)
-    }
     val logDao: LogDao get() = database.logDao()
     val scheduleDao: ScheduleDao get() = database.scheduleDao()
 
     val settings: AppSettings by lazy {
         AppSettings(context)
+    }
+
+    val chatRepository: ChatRepository by lazy {
+        ChatRepository(chatDao, settings)
     }
 
     val chatService: AiChatService by lazy {

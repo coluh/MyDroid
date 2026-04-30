@@ -1,6 +1,9 @@
 package com.destywen.mydroid.ui.screen
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -104,6 +107,7 @@ fun MainApp(container: AppContainer) {
             }
         }
     ) {
+        val chatViewModel: ChatViewModel = viewModel(factory = ChatViewModel.Factory(container))
         NavHost(navController = navController, startDestination = Screen.Home.route) {
             composable(Screen.Home.route) {
                 HomeScreen { scope.launch { drawerState.open() } }
@@ -117,8 +121,7 @@ fun MainApp(container: AppContainer) {
                 ScheduleScreen(viewModel) { scope.launch { drawerState.open() } }
             }
             composable(Screen.Chat.route) {
-                val viewModel: ChatViewModel = viewModel(factory = ChatViewModel.Factory(container))
-                ChatScreen(viewModel, {
+                ChatScreen(chatViewModel, {
                     navController.navigate(Screen.Conversation.passArgs(it))
                 }) { scope.launch { drawerState.open() } }
             }
@@ -135,10 +138,14 @@ fun MainApp(container: AppContainer) {
 
             composable(
                 route = Screen.Conversation.route,
-                arguments = listOf(navArgument("convId") { type = NavType.LongType })
+                arguments = listOf(navArgument("convId") { type = NavType.LongType }),
+                enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left) },
+                exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right) },
+                popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left) },
+                popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right) },
             ) {
                 val convId = it.arguments?.getLong("convId") ?: 0L
-                ConversationScreen(convId)
+                ConversationScreen(chatViewModel, convId, { scope.launch { drawerState.open() } })
             }
         }
     }

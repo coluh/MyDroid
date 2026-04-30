@@ -13,6 +13,21 @@ import java.io.File
 import kotlin.math.min
 
 class FileManager(private val context: Context) {
+
+    // return relative path based on context.filesDir
+    suspend fun saveImage(uri: Uri, dir: String, name: String): String = withContext(Dispatchers.IO) {
+        val appDir = File(context.filesDir, dir).apply { mkdirs() }
+        val file = File(appDir, name)
+
+        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+            file.outputStream().use { outputStream ->
+                inputStream.copyTo(outputStream)
+            }
+        }
+
+        "${dir}/${name}"
+    }
+
     suspend fun saveImage(uri: Uri): String = withContext(Dispatchers.IO) {
         context.contentResolver.openInputStream(uri).use { stream0 ->
             val orientation = ExifInterface(stream0!!).getAttributeInt(
