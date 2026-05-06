@@ -50,21 +50,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.destywen.mydroid.MyApplication
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.ScheduleEntity
 import com.destywen.mydroid.data.local.ScheduleGroupEntity
 import com.destywen.mydroid.ui.components.BottomModal
 import com.destywen.mydroid.ui.components.DateTimePickerButton
+import com.destywen.mydroid.ui.screen.journal.JournalViewModel
 import com.destywen.mydroid.util.toShortTime
 
 @Composable
-fun ScheduleScreen(viewModel: ScheduleViewModel, onNavigate: () -> Unit) {
+fun ScheduleScreen(onNavigate: () -> Unit) {
+    val app = LocalContext.current.applicationContext as MyApplication
+    val viewModel: ScheduleViewModel = viewModel(factory = ScheduleViewModel.Factory(app))
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     var showEditor by rememberSaveable { mutableStateOf(false) }

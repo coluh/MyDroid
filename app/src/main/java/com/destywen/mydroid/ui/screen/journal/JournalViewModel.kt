@@ -1,26 +1,21 @@
 package com.destywen.mydroid.ui.screen.journal
 
+import android.app.Application
 import android.net.Uri
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.destywen.mydroid.AppContainer
+import com.destywen.mydroid.MyApplication
 import com.destywen.mydroid.data.local.AgentEntity
-import com.destywen.mydroid.data.local.AppSettings
-import com.destywen.mydroid.data.local.ChatDao
 import com.destywen.mydroid.data.local.CommentEntity
-import com.destywen.mydroid.data.local.JournalDao
 import com.destywen.mydroid.data.local.JournalEntity
 import com.destywen.mydroid.data.local.Role
-import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.data.remote.Message
 import com.destywen.mydroid.domain.AppLogger
-import com.destywen.mydroid.domain.FileManager
 import com.destywen.mydroid.util.toDateTime
 import com.destywen.mydroid.util.toDateTimeString
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -31,7 +26,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlin.random.Random
 
 data class Comment(
     val id: Int,
@@ -63,12 +57,15 @@ data class JournalScreenState(
 )
 
 class JournalViewModel(
-    private val journalDao: JournalDao,
-    chatDao: ChatDao,
-    private val manager: FileManager,
-    private val service: AiChatService,
-    private val settings: AppSettings
-) : ViewModel() {
+    application: Application,
+) : AndroidViewModel(application) {
+    private val app = application as MyApplication
+    private val journalDao = app.database.journalDao()
+    private val chatDao = app.database.chatDao()
+    private val manager = app.fileManager
+    private val settings = app.settings
+    private val service = app.apiService
+
     private val _journalsFlow = journalDao.getAllJournals()
     private val _commentsFlow = journalDao.getAllComments()
     private val _agentsFlow = chatDao.getAgents()
@@ -366,15 +363,9 @@ class JournalViewModel(
     }
 
     companion object {
-        fun Factory(container: AppContainer) = viewModelFactory {
+        fun Factory(app: Application) = viewModelFactory {
             initializer {
-                JournalViewModel(
-                    container.journalDao,
-                    container.chatDao,
-                    container.fileManager,
-                    container.chatService,
-                    container.settings
-                )
+                JournalViewModel(app)
             }
         }
     }

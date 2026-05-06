@@ -22,6 +22,21 @@ data class UserEntity(
     val createdAt: Long = System.currentTimeMillis(),
 )
 
+@Entity(tableName = "llm_config")
+data class LlmConfigEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userId: Long?,
+    val name: String,
+    val provider: String,
+    val model: String,
+    val apiKey: String = "",
+    val systemPrompt: String,
+    val temperature: Float = 0.7f,
+    val maxTokens: Int = 2048,
+    val topP: Float = 0.9f,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
 @Entity(tableName = "conversations")
 data class ConversationEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -87,6 +102,18 @@ interface ChatDao {
     fun getAllUsers(): Flow<List<UserEntity>>
 
     @Insert
+    suspend fun insertLlmConfig(config: LlmConfigEntity)
+
+    @Update
+    suspend fun updateLlmConfig(config: LlmConfigEntity)
+
+    @Delete
+    suspend fun deleteLlmConfig(config: LlmConfigEntity)
+
+    @Query("SELECT * FROM llm_config")
+    fun getAllLlmConfigs(): Flow<List<LlmConfigEntity>>
+
+    @Insert
     suspend fun insertConversation(conversation: ConversationEntity): Long
 
     @Update
@@ -99,7 +126,7 @@ interface ChatDao {
     fun getAllConversations(): Flow<List<ConversationEntity>>
 
     @Query("SELECT * FROM conversations WHERE id = :id")
-    suspend fun getConversation(id: Long) : ConversationEntity
+    suspend fun getConversation(id: Long): ConversationEntity
 
     @Insert
     suspend fun insertMessage(message: MessageEntity): Long

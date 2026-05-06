@@ -3,6 +3,7 @@ package com.destywen.mydroid.domain
 import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.ChatDao
 import com.destywen.mydroid.data.local.ConversationEntity
+import com.destywen.mydroid.data.local.LlmConfigEntity
 import com.destywen.mydroid.data.local.MemberEntity
 import com.destywen.mydroid.data.local.MessageEntity
 import com.destywen.mydroid.data.local.UserEntity
@@ -13,6 +14,7 @@ import com.destywen.mydroid.domain.model.MessageType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 class ChatRepository(private val chatDao: ChatDao, private val settings: AppSettings) {
     fun getAllConversations(): Flow<List<Conversation>> {
@@ -26,6 +28,9 @@ class ChatRepository(private val chatDao: ChatDao, private val settings: AppSett
             val latestMsgMap = latestMessages.associateBy { it.convId }
             convs.mapNotNull { conv ->
                 val convMembers = members.filter { it.convId == conv.id }
+                if (convMembers.find { it.userId == selfId } == null) {
+                    return@mapNotNull null
+                }
                 val unreadCount = convMembers.find { it.userId == selfId }?.unread ?: 0
                 val latestMsg = latestMsgMap[conv.id]
 
@@ -90,12 +95,19 @@ class ChatRepository(private val chatDao: ChatDao, private val settings: AppSett
     }
 
     fun getMessages(convId: Long): Flow<List<Message>> {
-        return combine(chatDao.getMessagesByConversation(convId), settings.userId) { entities, userId ->
+        return combine(
+            chatDao.getMessagesByConversation(convId),
+            chatDao.getAllUsers(),
+            settings.userId
+        ) { entities, users, userId ->
             entities.map { entity ->
+                val user = users.find { it.id == entity.senderId }
                 Message(
                     id = entity.id,
                     convId = entity.convId,
                     senderId = entity.senderId,
+                    senderName = user?.name ?: "??",
+                    senderAvatar = user?.avatar,
                     type = when (entity.type) {
                         "text" -> MessageType.TEXT
                         "image" -> MessageType.IMAGE
@@ -129,6 +141,25 @@ class ChatRepository(private val chatDao: ChatDao, private val settings: AppSett
         )
         chatDao.updateConversation(conv)
         chatDao.incrementUnread(convId, senderId)
+    }
+
+    fun getMemberIds(convId: Long): Flow<List<Long>> = chatDao.getMembers(convId).map { entities ->
+        entities.map { it.userId }
+    }
+
+    suspend fun getConvType(convId: Long): ConversationType {
+        val type = chatDao.getConversation(convId).type
+        return if (type == "private") ConversationType.PRIVATE else ConversationType.GROUP
+    }
+
+    fun getLlmConfigs() = chatDao.getAllLlmConfigs()
+
+    suspend fun saveLlmConfig(entity: LlmConfigEntity) {
+        if (entity.id == 0L) {
+            chatDao.insertLlmConfig(entity)
+        } else {
+            chatDao.updateLlmConfig(entity)
+        }
     }
 
     suspend fun clear() {

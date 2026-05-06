@@ -1,5 +1,6 @@
 package com.destywen.mydroid.ui.screen.chat
 
+import android.app.Application
 import android.net.Uri
 import android.os.Parcelable
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -51,17 +52,32 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import coil3.compose.AsyncImage
+import com.destywen.mydroid.MyApplication
 import com.destywen.mydroid.R
+import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.UserEntity
+import com.destywen.mydroid.data.remote.AiChatService
+import com.destywen.mydroid.domain.ChatRepository
+import com.destywen.mydroid.domain.FileManager
+import com.destywen.mydroid.domain.model.Conversation
 import com.destywen.mydroid.util.toSmartTime
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
-import java.io.File
 
 @Parcelize
 sealed class ChatModal : Parcelable {
@@ -71,7 +87,9 @@ sealed class ChatModal : Parcelable {
 }
 
 @Composable
-fun ChatScreen(viewModel: ChatViewModel, onNavigateConv: (Long) -> Unit, onDrawer: () -> Unit) {
+fun ChatListScreen(onConversationClick: (Long) -> Unit, onDrawer: () -> Unit) {
+    val app = LocalContext.current.applicationContext as Application
+    val viewModel: ChatListViewModel = viewModel(factory = ChatListViewModel.Factory(app))
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
     val users by viewModel.users.collectAsStateWithLifecycle()
     val selfId by viewModel.selfId.collectAsStateWithLifecycle()
@@ -93,16 +111,19 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigateConv: (Long) -> Unit, onDrawe
                 actions = {
                     var expanded by remember { mutableStateOf(false) }
                     selfUser?.let {
-                        Avatar(it.avatar, it.name, 40)
+                        Avatar(it.avatar, it.name, 40) {
+                            activeModal = ChatModal.UserList
+                            expanded = false
+                        }
                     }
                     IconButton(onClick = { expanded = true }) {
                         Icon(Icons.Default.Add, null)
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        DropdownMenuItem(onClick = {
-                            activeModal = ChatModal.UserList
-                            expanded = false
-                        }) { Text("登录") }
+//                        DropdownMenuItem(onClick = {
+//                            activeModal = ChatModal.UserList
+//                            expanded = false
+//                        }) { Text("登录") }
                         DropdownMenuItem(onClick = {
                             activeModal = ChatModal.CreateUser
                             expanded = false
@@ -110,10 +131,10 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigateConv: (Long) -> Unit, onDrawe
                         DropdownMenuItem(onClick = {
                             expanded = false
                         }) { Text("创建群聊") }
-                        DropdownMenuItem(onClick = {
-                            viewModel.clear()
-                            expanded = false
-                        }) { Text("clear") }
+//                        DropdownMenuItem(onClick = {
+//                            viewModel.clear()
+//                            expanded = false
+//                        }) { Text("clear") }
                     }
                 }
             )
@@ -128,7 +149,7 @@ fun ChatScreen(viewModel: ChatViewModel, onNavigateConv: (Long) -> Unit, onDrawe
         ) {
             items(conversations, key = { it.id }) { conv ->
                 ConvListItem(conv.title, conv.avatar, conv.lastMessageTime, conv.lastMessagePreview, conv.unreadCount) {
-                    onNavigateConv(conv.id)
+                    onConversationClick(conv.id)
                 }
             }
         }
@@ -292,6 +313,51 @@ fun ImagePicker(modifier: Modifier = Modifier, imageUri: Uri?, onPick: (Uri) -> 
         } else {
             Column {
                 Icon(Icons.Default.Add, null, Modifier.fillMaxSize(0.5f))
+            }
+        }
+    }
+}
+
+
+class ChatListViewModel(
+    private val service: AiChatService,
+    private val repository: ChatRepository,
+    private val manager: FileManager,
+    private val settings: AppSettings
+) : ViewModel() {
+
+    val conversations: StateFlow<List<Conversation>> =
+        repository.getAllConversations().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val users: StateFlow<List<UserEntity>> =
+        repository.getUsers().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val selfId: StateFlow<Long?> = settings.userId.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val error = MutableStateFlow<String?>(null)
+
+    fun createUser(name: String, avatar: Uri?) = viewModelScope.launch(Dispatchers.IO) {
+        val avatarPath = if (avatar != null) {
+            manager.saveImage(avatar, "img/avatars", "${name}_${System.currentTimeMillis()}.png")
+        } else null
+        repository.createUser(name, avatarPath)
+    }
+
+    fun setSelf(userId: Long) = viewModelScope.launch {
+        settings.updateUserId(userId)
+    }
+
+    fun clear() = viewModelScope.launch {
+        repository.clear()
+    }
+
+    companion object {
+        fun Factory(application: Application) = viewModelFactory {
+            initializer {
+                val app = application as MyApplication
+                ChatListViewModel(
+                    app.apiService,
+                    app.chatRepository,
+                    app.fileManager,
+                    app.settings
+                )
             }
         }
     }

@@ -1,6 +1,6 @@
 package com.destywen.mydroid.ui.screen.chat
 
-import android.os.Parcelable
+import android.app.Application
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.AppBarDefaults
-import androidx.compose.material.DropdownMenu
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -26,34 +25,84 @@ import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.destywen.mydroid.MyApplication
 import com.destywen.mydroid.R
+import com.destywen.mydroid.data.local.AppSettings
+import com.destywen.mydroid.domain.ChatRepository
 import com.destywen.mydroid.domain.model.Message
 import com.destywen.mydroid.domain.model.MessageType
 import com.destywen.mydroid.util.toSmartTime
-import java.nio.file.WatchEvent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 
+data class ConversationUiState(
+    val messages: List<Message> = emptyList(),
+    val selfUserId: Long? = null,
+    val error: String? = null,
+)
+
+class ConversationViewModel(
+    convId: Long,
+    private val repository: ChatRepository,
+    settings: AppSettings,
+) : ViewModel() {
+
+    private val _messages = repository.getMessages(convId)
+    private val _selfId = settings.userId
+    private val _error = MutableStateFlow<String?>(null)
+
+    val state = combine(_messages, _selfId, _error) { messages, selfId, error ->
+        ConversationUiState(messages, selfId, error)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, ConversationUiState())
+
+    fun sendMessage(convId: Long, content: String, senderId: Long? = null) = viewModelScope.launch(Dispatchers.IO) {
+        val userId = senderId ?: _selfId.first()
+        if (userId == null) {
+            _error.update { "self user id not set" }
+            return@launch
+        }
+        repository.sendTextMessage(convId, userId, content)
+    }
+
+    companion object {
+        fun Factory(convId: Long, application: Application) = viewModelFactory {
+            initializer {
+                val app = application as MyApplication
+                ConversationViewModel(convId, app.chatRepository, app.settings)
+            }
+        }
+    }
+}
+
 @Composable
-fun ConversationScreen(viewModel: ChatViewModel, convId: Long, onBack: () -> Unit) {
-    val messages by viewModel.getMessages(convId).collectAsStateWithLifecycle()
-    val messageItems = rememberMessageItems(messages)
-    val users by viewModel.users.collectAsStateWithLifecycle()
-    val error by viewModel.error.collectAsStateWithLifecycle()
+fun ConversationScreen(convId: Long, onNavigateSettings: () -> Unit, onBack: () -> Unit) {
+    val app = LocalContext.current.applicationContext as Application
+    val viewModel: ConversationViewModel = viewModel(factory = ConversationViewModel.Factory(convId, app))
+    val state = viewModel.state.collectAsStateWithLifecycle()
+    val messageItems = rememberMessageItems(state.value.messages)
 
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -63,12 +112,14 @@ fun ConversationScreen(viewModel: ChatViewModel, convId: Long, onBack: () -> Uni
         topBar = {
             TopAppBar(
                 windowInsets = AppBarDefaults.topAppBarWindowInsets,
-                title = { Text(error ?: stringResource(R.string.chat)) },
+                title = { Text(state.value.error ?: stringResource(R.string.chat)) },
                 navigationIcon = {
                     IconButton({ onBack() }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null) }
                 },
                 actions = {
-                    IconButton(onClick = { }) {
+                    IconButton(onClick = {
+                        onNavigateSettings()
+                    }) {
                         Icon(Icons.Default.Menu, null)
                     }
                 }
@@ -100,8 +151,12 @@ fun ConversationScreen(viewModel: ChatViewModel, convId: Long, onBack: () -> Uni
                             val message = item.message
                             when (message.type) {
                                 MessageType.TEXT -> {
-                                    val user = users.find { it.id == message.senderId }
-                                    ChatBubble(message.content, message.isSelf, user?.avatar, user?.name ?: "?")
+                                    ChatBubble(
+                                        message.content,
+                                        message.isSelf,
+                                        message.senderAvatar,
+                                        message.senderName
+                                    )
                                 }
 
                                 else -> ChatBubble("not supported: ${message.content}")

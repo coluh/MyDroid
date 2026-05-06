@@ -2,6 +2,7 @@ package com.destywen.mydroid.ui.screen.chat
 
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,13 +57,16 @@ import java.io.File
 
 
 @Composable
-fun Avatar(avatar: String?, name: String, size: Int = 60) {
+fun Avatar(avatar: String?, name: String, size: Int = 60, onClick: () -> Unit = {}) {
     val context = LocalContext.current
 
     Box(
         modifier = Modifier
             .size(size.dp)
-            .clip(CircleShape), contentAlignment = Alignment.Center
+            .clip(CircleShape)
+            .clickable(null, LocalIndication.current) {
+                onClick()
+            }, contentAlignment = Alignment.Center
     ) {
         if (!avatar.isNullOrEmpty()) {
             AsyncImage(
@@ -153,7 +157,6 @@ fun InputLine(text: String? = null, onSend: (String) -> Unit) {
         }
     }
 }
-
 
 @Composable
 fun AgentEditor(origin: AgentEntity?, onDismiss: () -> Unit, onComplete: (AgentEntity) -> Unit) {

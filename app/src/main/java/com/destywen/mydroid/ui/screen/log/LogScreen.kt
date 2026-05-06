@@ -1,5 +1,6 @@
 package com.destywen.mydroid.ui.screen.log
 
+import android.app.Application
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,10 +28,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.LogEntity
 import com.destywen.mydroid.data.local.LogLevel
@@ -38,7 +41,9 @@ import com.destywen.mydroid.util.toDateTimeString
 
 
 @Composable
-fun LogScreen(viewModel: LogViewModel, onNavigate: () -> Unit) {
+fun LogScreen(onNavigate: () -> Unit) {
+    val app = LocalContext.current.applicationContext as Application
+    val viewModel: LogViewModel = viewModel(factory = LogViewModel.Factory(app))
     val logs by viewModel.logs.collectAsStateWithLifecycle()
 
     Scaffold(

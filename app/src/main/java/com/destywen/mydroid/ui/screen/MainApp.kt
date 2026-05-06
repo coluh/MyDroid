@@ -2,8 +2,6 @@ package com.destywen.mydroid.ui.screen
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,25 +39,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.destywen.mydroid.AppContainer
 import com.destywen.mydroid.R
-import com.destywen.mydroid.ui.screen.chat.ChatScreen
-import com.destywen.mydroid.ui.screen.chat.ChatViewModel
+import com.destywen.mydroid.ui.screen.chat.ChatListScreen
 import com.destywen.mydroid.ui.screen.chat.ConversationScreen
+import com.destywen.mydroid.ui.screen.chat.ConversationSettingsScreen
 import com.destywen.mydroid.ui.screen.home.HomeScreen
 import com.destywen.mydroid.ui.screen.journal.JournalScreen
-import com.destywen.mydroid.ui.screen.journal.JournalViewModel
 import com.destywen.mydroid.ui.screen.log.LogScreen
-import com.destywen.mydroid.ui.screen.log.LogViewModel
 import com.destywen.mydroid.ui.screen.schedule.ScheduleScreen
-import com.destywen.mydroid.ui.screen.schedule.ScheduleViewModel
+import com.destywen.mydroid.util.slideInFromLeft
+import com.destywen.mydroid.util.slideInFromRight
+import com.destywen.mydroid.util.slideOutToLeft
+import com.destywen.mydroid.util.slideOutToRight
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
@@ -70,8 +67,13 @@ sealed class Screen(val route: String) {
     object Games : Screen("games")
     object Settings : Screen("settings")
     object Log : Screen("log")
+
     object Conversation : Screen("chat/{convId}") {
         fun passArgs(convId: Long): String = "chat/${convId}"
+    }
+
+    object ConversationSetting : Screen("chat/{convId}/settings") {
+        fun passArgs(convId: Long): String = "chat/${convId}/settings"
     }
 }
 
@@ -87,7 +89,7 @@ enum class DrawerItem(val label: Int, val icon: ImageVector, val screen: Screen)
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun MainApp(container: AppContainer) {
+fun MainApp() {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
@@ -107,23 +109,21 @@ fun MainApp(container: AppContainer) {
             }
         }
     ) {
-        val chatViewModel: ChatViewModel = viewModel(factory = ChatViewModel.Factory(container))
-        NavHost(navController = navController, startDestination = Screen.Home.route) {
+        NavHost(
+            navController = navController, startDestination = Screen.Home.route,
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() },
+        ) {
             composable(Screen.Home.route) {
                 HomeScreen { scope.launch { drawerState.open() } }
             }
             composable(Screen.Journal.route) {
-                val journalViewModel: JournalViewModel = viewModel(factory = JournalViewModel.Factory(container))
-                JournalScreen(journalViewModel) { scope.launch { drawerState.open() } }
+                JournalScreen { scope.launch { drawerState.open() } }
             }
             composable(Screen.Schedule.route) {
-                val viewModel: ScheduleViewModel = viewModel(factory = ScheduleViewModel.Factory(container))
-                ScheduleScreen(viewModel) { scope.launch { drawerState.open() } }
-            }
-            composable(Screen.Chat.route) {
-                ChatScreen(chatViewModel, {
-                    navController.navigate(Screen.Conversation.passArgs(it))
-                }) { scope.launch { drawerState.open() } }
+                ScheduleScreen { scope.launch { drawerState.open() } }
             }
             composable(Screen.Games.route) {
                 HomeScreen { scope.launch { drawerState.open() } }
@@ -132,21 +132,38 @@ fun MainApp(container: AppContainer) {
                 HomeScreen { scope.launch { drawerState.open() } }
             }
             composable(Screen.Log.route) {
-                val viewModel: LogViewModel = viewModel(factory = LogViewModel.Factory(container))
-                LogScreen(viewModel) { scope.launch { drawerState.open() } }
+                LogScreen { scope.launch { drawerState.open() } }
             }
 
+            // chat module
+            composable(Screen.Chat.route) {
+                ChatListScreen(
+                    onConversationClick = { navController.navigate(Screen.Conversation.passArgs(it)) },
+                    onDrawer = { scope.launch { drawerState.open() } },
+                )
+            }
             composable(
                 route = Screen.Conversation.route,
                 arguments = listOf(navArgument("convId") { type = NavType.LongType }),
-                enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left) },
-                exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right) },
-                popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left) },
-                popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right) },
             ) {
                 val convId = it.arguments?.getLong("convId") ?: 0L
-                ConversationScreen(chatViewModel, convId, { navController.popBackStack() })
+                ConversationScreen(
+                    convId = convId,
+                    onNavigateSettings = { navController.navigate(Screen.ConversationSetting.passArgs(convId)) },
+                    onBack = { navController.popBackStack() },
+                )
             }
+            composable(
+                route = Screen.ConversationSetting.route,
+                arguments = listOf(navArgument("convId") { type = NavType.LongType }),
+            ) {
+                val convId = it.arguments?.getLong("convId") ?: 0L
+                ConversationSettingsScreen(
+                    convId = convId,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+
         }
     }
 

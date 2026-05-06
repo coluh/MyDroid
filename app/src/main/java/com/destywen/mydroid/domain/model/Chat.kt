@@ -22,6 +22,8 @@ data class Message(
     val id: Long = 0,
     val convId: Long,
     val senderId: Long,
+    val senderName: String,
+    val senderAvatar: String?,
     val type: MessageType,
     val content: String, // or attachmentId
     val timestamp: Long,

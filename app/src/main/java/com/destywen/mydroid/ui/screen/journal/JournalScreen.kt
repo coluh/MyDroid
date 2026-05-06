@@ -87,7 +87,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import com.destywen.mydroid.MyApplication
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.AgentEntity
 import com.destywen.mydroid.ui.components.AgentCard
@@ -106,7 +108,9 @@ sealed class JournalModal : Parcelable {
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
+fun JournalScreen(onNavigate: () -> Unit) {
+    val app = LocalContext.current.applicationContext as MyApplication
+    val viewModel: JournalViewModel = viewModel(factory = JournalViewModel.Factory(app))
     val state by viewModel.state.collectAsStateWithLifecycle()
     var activeModal by rememberSaveable { mutableStateOf<JournalModal>(JournalModal.None) }
     var query by rememberSaveable { mutableStateOf<String?>(null) }
@@ -320,9 +324,11 @@ fun JournalScreen(viewModel: JournalViewModel, onNavigate: () -> Unit) {
                     .background(Color.Black.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center
             ) {
-                Card(modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp)) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp)
+                ) {
                     val progress = if (state.importingTotal == null || state.importingTotal == 0) 0f else {
                         state.importing!!.toFloat() / state.importingTotal!!
                     }
