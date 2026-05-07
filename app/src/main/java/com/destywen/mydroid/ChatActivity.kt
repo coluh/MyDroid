@@ -48,7 +48,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,7 +55,7 @@ import com.destywen.mydroid.data.local.AgentEntity
 import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.Role
 import com.destywen.mydroid.data.remote.AiChatService
-import com.destywen.mydroid.data.remote.Message
+import com.destywen.mydroid.data.remote.ApiMessage
 import com.destywen.mydroid.data.remote.NetworkModule
 import com.destywen.mydroid.ui.theme.MyDroidTheme
 import kotlinx.coroutines.Job
@@ -83,7 +82,7 @@ class ChatActivity : ComponentActivity() {
 @Composable
 fun ChatFloating(initialText: String, service: AiChatService, onDismiss: () -> Unit) {
 
-    var context by rememberSaveable { mutableStateOf(listOf(Message(Role.USER, "解释这个：$initialText"))) }
+    var context by rememberSaveable { mutableStateOf(listOf(ApiMessage(Role.USER, "解释这个：$initialText"))) }
     var input by rememberSaveable { mutableStateOf("") }
     var showInputDetail by rememberSaveable { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
@@ -105,11 +104,11 @@ fun ChatFloating(initialText: String, service: AiChatService, onDismiss: () -> U
     fun call() {
         currentJob = scope.launch {
             var response = ""
-            context = context + Message(Role.ASSISTANT, response)
+            context = context + ApiMessage(Role.ASSISTANT, response)
             runCatching {
                 service.chatStreaming(context, config).collect { token ->
                     response += token
-                    context = context.dropLast(1) + Message(Role.ASSISTANT, response)
+                    context = context.dropLast(1) + ApiMessage(Role.ASSISTANT, response)
                 }
             }.onFailure {
                 context = context.dropLast(1)
@@ -189,9 +188,9 @@ fun ChatFloating(initialText: String, service: AiChatService, onDismiss: () -> U
                             onClick = {
                                 currentJob?.cancel()
                                 context = if (context.last().role == Role.USER) {
-                                    context.dropLast(1) + Message(Role.USER, context.last().content + input)
+                                    context.dropLast(1) + ApiMessage(Role.USER, context.last().content + input)
                                 } else {
-                                    context + Message(Role.USER, input)
+                                    context + ApiMessage(Role.USER, input)
                                 }
                                 input = ""
                                 call()

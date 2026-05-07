@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,11 +45,16 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.destywen.mydroid.MyApplication
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.AppSettings
+import com.destywen.mydroid.data.local.Role
+import com.destywen.mydroid.data.remote.AiChatService
+import com.destywen.mydroid.data.remote.ApiMessage
 import com.destywen.mydroid.domain.ChatRepository
 import com.destywen.mydroid.domain.model.Message
 import com.destywen.mydroid.domain.model.MessageType
 import com.destywen.mydroid.util.toSmartTime
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -61,37 +67,96 @@ import java.time.LocalDateTime
 data class ConversationUiState(
     val messages: List<Message> = emptyList(),
     val selfUserId: Long? = null,
-    val error: String? = null,
+    val status: String? = null,
 )
 
 class ConversationViewModel(
-    convId: Long,
+    private val convId: Long,
     private val repository: ChatRepository,
     settings: AppSettings,
+    private val service: AiChatService,
 ) : ViewModel() {
 
     private val _messages = repository.getMessages(convId)
     private val _selfId = settings.userId
-    private val _error = MutableStateFlow<String?>(null)
+    private val _status = MutableStateFlow<String?>(null)
 
-    val state = combine(_messages, _selfId, _error) { messages, selfId, error ->
+    val state = combine(_messages, _selfId, _status) { messages, selfId, error ->
         ConversationUiState(messages, selfId, error)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ConversationUiState())
+
+    private var generateJob: Job? = null
 
     fun sendMessage(convId: Long, content: String, senderId: Long? = null) = viewModelScope.launch(Dispatchers.IO) {
         val userId = senderId ?: _selfId.first()
         if (userId == null) {
-            _error.update { "self user id not set" }
+            _status.update { "self user id not set" }
             return@launch
         }
         repository.sendTextMessage(convId, userId, content)
+
+        if (userId == _selfId.first()) {
+            generateReply()
+        }
+    }
+
+    fun generateReply() {
+        generateJob?.cancel()
+        generateJob = viewModelScope.launch(Dispatchers.IO) {
+            val members = repository.getMemberIds(convId).first()
+            if (members.size != 2) {
+                _status.update { "not supported member count: ${members.size}" }
+                return@launch
+            }
+
+            val selfId = _selfId.first() ?: return@launch
+            val aiId = members.first { it != selfId }
+            val config = repository.getLlmConfigs().first().find { it.userId == aiId } ?: return@launch
+            val messages = _messages.first()
+            val context = mergeRounds(messages, selfId, aiId)
+
+            _status.update { "writing..." }
+            service.callLlm(context, config)
+                .onSuccess {
+                    sendMessage(convId, it, aiId)
+                    _status.update { null }
+                }
+                .onFailure {
+                    _status.update { "fail" }
+                }
+        }
+    }
+
+    private fun mergeRounds(messages: List<Message>, userId: Long, aiId: Long): List<ApiMessage> {
+        if (messages.isEmpty()) return emptyList()
+
+        val result = mutableListOf<ApiMessage>()
+        var currentRole = Role.USER
+        var currentContent = StringBuilder("hi")
+
+        for (message in messages) {
+            val role = if (message.senderId == aiId) Role.ASSISTANT else Role.USER
+            if (role == currentRole) {
+                currentContent.append("\n").append(message.content)
+            } else {
+                result.add(ApiMessage(currentRole, currentContent.toString()))
+                currentRole = role
+                currentContent = StringBuilder(message.content)
+            }
+        }
+        result.add(ApiMessage(currentRole, currentContent.toString()))
+        if (result.last().role == Role.ASSISTANT) {
+            result.removeAt(result.lastIndex)
+        }
+
+        return result
     }
 
     companion object {
         fun Factory(convId: Long, application: Application) = viewModelFactory {
             initializer {
                 val app = application as MyApplication
-                ConversationViewModel(convId, app.chatRepository, app.settings)
+                ConversationViewModel(convId, app.chatRepository, app.settings, app.apiService)
             }
         }
     }
@@ -108,11 +173,17 @@ fun ConversationScreen(convId: Long, onNavigateSettings: () -> Unit, onBack: () 
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
 
+    LaunchedEffect(messageItems.lastOrNull()) {
+        if (messageItems.isNotEmpty()) {
+            listState.animateScrollToItem(0)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 windowInsets = AppBarDefaults.topAppBarWindowInsets,
-                title = { Text(state.value.error ?: stringResource(R.string.chat)) },
+                title = { Text(state.value.status ?: stringResource(R.string.chat)) },
                 navigationIcon = {
                     IconButton({ onBack() }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null) }
                 },
@@ -212,13 +283,13 @@ fun ChatBubble(content: String, isSelf: Boolean = false, avatar: String? = null,
         ) {
             if (isSelf) {
                 Surface(color = bgColor, shape = RoundedCornerShape(20.dp)) {
-                    Text(content, modifier = Modifier.padding(12.dp, 8.dp))
+                    Text(content, style = MaterialTheme.typography.body1, modifier = Modifier.padding(12.dp, 8.dp))
                 }
                 Avatar(avatar, name, size = 50)
             } else {
                 Avatar(avatar, name, size = 50)
                 Surface(color = bgColor, shape = RoundedCornerShape(20.dp)) {
-                    Text(content, modifier = Modifier.padding(12.dp, 8.dp))
+                    Text(content, style = MaterialTheme.typography.body1, modifier = Modifier.padding(12.dp, 8.dp))
                 }
             }
         }

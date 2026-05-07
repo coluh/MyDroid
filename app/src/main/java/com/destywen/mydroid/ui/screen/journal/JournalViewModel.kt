@@ -11,7 +11,7 @@ import com.destywen.mydroid.data.local.AgentEntity
 import com.destywen.mydroid.data.local.CommentEntity
 import com.destywen.mydroid.data.local.JournalEntity
 import com.destywen.mydroid.data.local.Role
-import com.destywen.mydroid.data.remote.Message
+import com.destywen.mydroid.data.remote.ApiMessage
 import com.destywen.mydroid.domain.AppLogger
 import com.destywen.mydroid.util.toDateTime
 import com.destywen.mydroid.util.toDateTimeString
@@ -260,10 +260,10 @@ class JournalViewModel(
             }
     }
 
-    private fun mergeComments(comments: List<Comment>, userPrefix: String): List<Message> {
-        if (comments.isEmpty()) return listOf(Message(Role.USER, userPrefix))
+    private fun mergeComments(comments: List<Comment>, userPrefix: String): List<ApiMessage> {
+        if (comments.isEmpty()) return listOf(ApiMessage(Role.USER, userPrefix))
 
-        val result = mutableListOf<Message>()
+        val result = mutableListOf<ApiMessage>()
         var currentRole = Role.USER
         var currentContent = StringBuilder(userPrefix)
 
@@ -271,13 +271,13 @@ class JournalViewModel(
             if (comment.role == currentRole) {
                 currentContent.append("\n").append(comment.content)
             } else {
-                result.add(Message(currentRole, currentContent.toString()))
+                result.add(ApiMessage(currentRole, currentContent.toString()))
                 currentRole = comment.role
                 currentContent = StringBuilder(comment.content)
             }
         }
 
-        result.add(Message(currentRole, currentContent.toString()))
+        result.add(ApiMessage(currentRole, currentContent.toString()))
         if (result.last().role == Role.ASSISTANT) {
             result.removeAt(result.lastIndex)
         }

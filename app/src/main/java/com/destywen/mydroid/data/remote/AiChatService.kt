@@ -3,6 +3,7 @@ package com.destywen.mydroid.data.remote
 import android.util.Base64
 import com.destywen.mydroid.data.local.AgentEntity
 import com.destywen.mydroid.data.local.AppSettings
+import com.destywen.mydroid.data.local.LlmConfigEntity
 import com.destywen.mydroid.data.local.Role
 import com.destywen.mydroid.domain.AppLogger
 import io.ktor.client.HttpClient
@@ -59,11 +60,43 @@ class AiChatService(private val client: HttpClient, settings: AppSettings) {
     private val defaultApiKey = settings.defaultApiKey
     private val visionModel = settings.vlModel
 
-    suspend fun chat(context: List<Message>, config: AgentEntity, image: File? = null): Result<String> =
+    suspend fun callLlm(context: List<ApiMessage>, config: LlmConfigEntity): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val endpoint = when (config.provider) {
+                    "deepseek" -> "https://api.deepseek.com/chat/completions"
+                    else -> defaultEndpoint.first()
+                } ?: error("endpoint not set")
+                val response = client.post(endpoint) {
+                    header(HttpHeaders.Authorization, "Bearer ${config.apiKey}")
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        ChatRequest(
+                            model = config.model,
+                            messages = listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context,
+                            stream = false,
+                            temperature = config.temperature.toDouble(),
+                            topP = config.topP.toDouble(),
+                            maxTokens = config.maxTokens,
+                            enableThinking = false,
+                        )
+                    )
+                }
+                if (!response.status.isSuccess()) {
+                    val body = response.bodyAsText()
+                    val message = runCatching { json.decodeFromString<ChatErrorWrapper>(body).error.message }
+                        .getOrElse { body }
+                    error("status ${response.status.value}, response: $message")
+                }
+                response.body<ChatResponse>().choices[0].message.content
+            }
+        }
+
+    suspend fun chat(context: List<ApiMessage>, config: AgentEntity, image: File? = null): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val response = if (image == null) {
-                    val prompt = listOf(Message(Role.SYSTEM, config.systemPrompt)) + context
+                    val prompt = listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context
                     val endpoint = config.apiEndpoint ?: defaultEndpoint.first()
                     val apiKey = config.apiKey ?: defaultApiKey.first()
                     if (endpoint == null) {
@@ -131,8 +164,8 @@ class AiChatService(private val client: HttpClient, settings: AppSettings) {
             }
         }
 
-    fun chatStreaming(context: List<Message>, config: AgentEntity): Flow<String> = channelFlow {
-        val prompt = listOf(Message(Role.SYSTEM, config.systemPrompt)) + context
+    fun chatStreaming(context: List<ApiMessage>, config: AgentEntity): Flow<String> = channelFlow {
+        val prompt = listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context
         val endpoint = config.apiEndpoint ?: defaultEndpoint.first()
         val apiKey = config.apiKey ?: defaultApiKey.first()
         if (endpoint == null) {
