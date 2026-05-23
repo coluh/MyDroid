@@ -7,81 +7,61 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.destywen.mydroid.MyApplication
 import com.destywen.mydroid.data.local.ScheduleEntity
-import com.destywen.mydroid.data.local.ScheduleGroupEntity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class ScheduleScreenState(
     val schedules: List<ScheduleEntity> = emptyList(),
-    val groups: List<ScheduleGroupEntity> = emptyList(),
-    val selectedGroupId: Long? = null,
     val status: String? = null,
 )
 
 class ScheduleViewModel(
-    private val application: Application
+    application: Application
 ) : AndroidViewModel(application) {
     private val scheduleDao = (application as MyApplication).database.scheduleDao()
     private val _schedules = scheduleDao.getAll()
-    private val _groups = scheduleDao.getAllGroups()
-    private val _selectedGroupId = MutableStateFlow<Long?>(null)
     private val _status = MutableStateFlow<String?>(null)
 
     val state: StateFlow<ScheduleScreenState> =
-        combine(_schedules, _groups, _selectedGroupId, _status) { items, groups, selectedGroupId, status ->
-            val filtered = if (selectedGroupId != null) {
-                items.filter { it.groupId == selectedGroupId }
-            } else {
-                items
-            }
-            val sorted = filtered.sortedBy { it.due ?: Long.MAX_VALUE }
+        combine(_schedules, _status) { items, status ->
             ScheduleScreenState(
-                schedules = sorted.filter { !it.isCompleted } + sorted.filter { it.isCompleted },
-                groups = groups,
-                selectedGroupId = selectedGroupId,
+                schedules = items.sortedNaturally(),
                 status = status
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScheduleScreenState())
 
-    fun selectGroup(groupId: Long?) {
-        _selectedGroupId.value = groupId
-    }
-
-    fun addGroup(name: String) = viewModelScope.launch {
-        scheduleDao.upsertGroup(ScheduleGroupEntity(name = name))
-    }
-
-    fun deleteGroup(groupId: Long) = viewModelScope.launch {
-        scheduleDao.clearGroupFromSchedules(groupId)
-        scheduleDao.deleteGroupById(groupId)
-    }
-
-    fun addSchedule(title: String, description: String?, due: Long?, groupId: Long? = _selectedGroupId.value) =
+    fun addSchedule(title: String, description: String?, due: Long?, groupName: String?) =
         viewModelScope.launch {
             scheduleDao.upsert(
                 ScheduleEntity(
                     title = title,
                     description = description?.takeIf { it.isNotBlank() },
                     due = due?.takeIf { it > 0 },
-                    groupId = groupId
+                    groupName = groupName?.takeIf { it.isNotBlank() }
                 )
             )
         }
 
-    fun updateSchedule(id: Long, title: String, description: String?, due: Long?, groupId: Long?) =
+    fun updateSchedule(id: Long, title: String, description: String?, due: Long?, groupName: String?) =
         viewModelScope.launch {
-            _schedules.first().find { it.id == id }?.let {
-                scheduleDao.upsert(it.copy(title = title, description = description, due = due, groupId = groupId))
+            state.value.schedules.find { it.id == id }?.let {
+                scheduleDao.upsert(
+                    it.copy(
+                        title = title,
+                        description = description?.takeIf { it.isNotBlank() },
+                        due = due?.takeIf { it > 0 },
+                        groupName = groupName?.takeIf { it.isNotBlank() }
+                    )
+                )
             }
         }
 
     fun checkSchedule(id: Long, checked: Boolean) = viewModelScope.launch {
-        _schedules.first().find { it.id == id }?.let {
+        state.value.schedules.find { it.id == id }?.let {
             scheduleDao.upsert(it.copy(isCompleted = checked))
         }
     }
@@ -96,5 +76,53 @@ class ScheduleViewModel(
                 ScheduleViewModel(app)
             }
         }
+    }
+}
+
+fun List<ScheduleEntity>.sortedNaturally(): List<ScheduleEntity> {
+
+    data class ItemWithGroup(val schedule: ScheduleEntity, val groupKey: String)
+
+    val items = this.map { schedule ->
+        val groupKey = schedule.groupName ?: "singleton_${schedule.id}"
+        ItemWithGroup(schedule, groupKey)
+    }
+
+    val groups = items.groupBy { it.groupKey }
+
+    data class GroupInfo(
+        val groupKey: String,
+        val schedules: List<ScheduleEntity>,
+        val category: Int, // 0=not complete, has due, 1=not complete, no due, 2=all complete
+        val minDue: Long?,
+    )
+
+    val groupInfos = groups.map { (key, groupItems) ->
+        val schedules = groupItems.map { it.schedule } // all schedules in one group
+        val uncompleted = schedules.filter { !it.isCompleted }
+        val uncompletedWithDue = uncompleted.filter { it.due != null }
+
+        val category = when {
+            uncompletedWithDue.isNotEmpty() -> 0
+            uncompleted.any { it.due == null } -> 1
+            else -> 2
+        }
+        val minDue = if (category == 0) uncompletedWithDue.minOf { it.due!! } else null
+        GroupInfo(key, schedules, category, minDue)
+    }
+
+    val sortedGroups = groupInfos.sortedWith(
+        compareBy<GroupInfo> { it.category }
+            .thenBy { it.minDue ?: Long.MAX_VALUE }
+            .thenBy { it.groupKey }
+    )
+
+    return sortedGroups.flatMap { group ->
+        group.schedules.sortedWith(
+            compareBy<ScheduleEntity> { it.isCompleted }
+                .thenByDescending { it.due != null }
+                .thenBy { it.due ?: Long.MAX_VALUE }
+                .thenBy { it.createdAt }
+        )
     }
 }

@@ -1,50 +1,45 @@
 package com.destywen.mydroid.ui.screen.schedule
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.AppBarDefaults
 import androidx.compose.material.Button
 import androidx.compose.material.Card
 import androidx.compose.material.Checkbox
-import androidx.compose.material.DropdownMenuItem
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.ExposedDropdownMenuBox
-import androidx.compose.material.ExposedDropdownMenuDefaults
-import androidx.compose.material.FilterChip
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Scaffold
-import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
-import androidx.compose.material.TextField
 import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,18 +48,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.destywen.mydroid.MyApplication
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.ScheduleEntity
-import com.destywen.mydroid.data.local.ScheduleGroupEntity
 import com.destywen.mydroid.ui.components.BottomModal
 import com.destywen.mydroid.ui.components.DateTimePickerButton
-import com.destywen.mydroid.ui.screen.journal.JournalViewModel
 import com.destywen.mydroid.util.toShortTime
 
 @Composable
@@ -75,7 +66,15 @@ fun ScheduleScreen(onNavigate: () -> Unit) {
 
     var showEditor by rememberSaveable { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf<ScheduleEntity?>(null) }
-    var showAddGroupDialog by rememberSaveable { mutableStateOf(false) }
+    var expandAll by rememberSaveable { mutableStateOf(false) }
+
+    val onCheck: (ScheduleEntity, Boolean) -> Unit = { schedule, checked ->
+        viewModel.checkSchedule(schedule.id, checked)
+    }
+    val onEdit: (ScheduleEntity) -> Unit = { schedule ->
+        editing = schedule
+        showEditor = true
+    }
 
     Scaffold(
         topBar = {
@@ -86,11 +85,24 @@ fun ScheduleScreen(onNavigate: () -> Unit) {
                     IconButton(onClick = { onNavigate() }) {
                         Icon(Icons.Default.Menu, null)
                     }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        // expand all schedules
+                        expandAll = !expandAll
+                    }) {
+                        if (!expandAll) {
+                            Icon(Icons.Default.KeyboardArrowDown, null)
+                        } else {
+                            Icon(Icons.Default.KeyboardArrowUp, null)
+                        }
+                    }
                 }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = {
+                // create new schedule
                 editing = null
                 showEditor = true
             }, modifier = Modifier.padding(24.dp)) {
@@ -102,61 +114,54 @@ fun ScheduleScreen(onNavigate: () -> Unit) {
             Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .padding(8.dp),
+                .padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
         ) {
-            GroupFilterRow(
-                groups = state.groups,
-                selectedGroupId = state.selectedGroupId,
-                onSelectGroup = { viewModel.selectGroup(it) },
-                onAddGroup = { showAddGroupDialog = true }
-            )
-
-            val displayItems = buildDisplayItems(state.schedules, state.groups, state.selectedGroupId)
-
+            val groupBackground = MaterialTheme.colors.onSurface.copy(alpha = 0.05f)
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                contentPadding = PaddingValues(vertical = 8.dp),
             ) {
-                items(displayItems, key = { item ->
-                    when (item) {
-                        is DisplayItem.GroupHeader -> "g_${item.group.id}"
-                        is DisplayItem.UngroupedHeader -> "g_null"
-                        is DisplayItem.ScheduleItem -> item.schedule.id
-                    }
-                }) { item ->
-                    when (item) {
-                        is DisplayItem.GroupHeader -> GroupHeaderItem(item.group.name)
-                        is DisplayItem.UngroupedHeader -> GroupHeaderItem("未分组")
-                        is DisplayItem.ScheduleItem -> ScheduleItem(
-                            item.schedule,
-                            modifier = Modifier.animateItem(),
-                            groupName = state.groups.find { it.id == item.schedule.groupId }?.name,
-                            onCheck = { viewModel.checkSchedule(item.schedule.id, it) },
-                            onEdit = {
-                                editing = item.schedule
-                                showEditor = true
+                var lastGroup: String? = null
+                state.schedules.forEach { schedule ->
+                    if (schedule.groupName != null && schedule.groupName != lastGroup) {
+                        item(key = "header_${schedule.groupName}") {
+                            Spacer(Modifier.height(8.dp))
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(groupBackground)
+                                    .padding(8.dp)
+                            ) {
+                                Text(
+                                    schedule.groupName,
+                                    style = MaterialTheme.typography.body1,
+                                )
                             }
-                        )
+                        }
                     }
+                    item(key = schedule.id) {
+                        if (schedule.groupName != null) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(groupBackground)
+                                    .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
+                                    .animateItem()
+                            ) {
+                                ScheduleItem(schedule, Modifier, expandAll, onCheck, onEdit)
+                            }
+                        } else {
+                            Spacer(Modifier.height(8.dp))
+                            ScheduleItem(schedule, Modifier.animateItem(), expandAll, onCheck, onEdit)
+                        }
+                    }
+                    lastGroup = schedule.groupName
                 }
             }
-        }
-
-        if (showAddGroupDialog) {
-            AddGroupDialog(
-                onDismiss = { showAddGroupDialog = false },
-                onConfirm = { name ->
-                    viewModel.addGroup(name)
-                    showAddGroupDialog = false
-                }
-            )
         }
 
         BottomModal(showEditor, { showEditor = false }) {
             ScheduleEditor(
                 initial = editing,
-                groups = state.groups,
                 onDismiss = { showEditor = false },
                 onComplete = { title, desc, due, groupId ->
                     if (editing != null) {
@@ -171,169 +176,13 @@ fun ScheduleScreen(onNavigate: () -> Unit) {
     }
 }
 
-private sealed class DisplayItem {
-    data class GroupHeader(val group: ScheduleGroupEntity) : DisplayItem()
-    data object UngroupedHeader : DisplayItem()
-    data class ScheduleItem(val schedule: ScheduleEntity) : DisplayItem()
-}
-
-private fun buildDisplayItems(
-    schedules: List<ScheduleEntity>,
-    groups: List<ScheduleGroupEntity>,
-    selectedGroupId: Long?,
-): List<DisplayItem> {
-    if (selectedGroupId != null) {
-        return schedules.map { DisplayItem.ScheduleItem(it) }
-    }
-
-    val grouped = schedules.groupBy { it.groupId }
-    val ungrouped = grouped[null].orEmpty()
-
-    return buildList {
-        for (group in groups) {
-            val items = grouped[group.id]
-            if (!items.isNullOrEmpty()) {
-                add(DisplayItem.GroupHeader(group))
-                items.forEach { add(DisplayItem.ScheduleItem(it)) }
-            }
-        }
-        if (ungrouped.isNotEmpty()) {
-            add(DisplayItem.UngroupedHeader)
-            ungrouped.forEach { add(DisplayItem.ScheduleItem(it)) }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterialApi::class)
-@Composable
-private fun GroupFilterRow(
-    groups: List<ScheduleGroupEntity>,
-    selectedGroupId: Long?,
-    onSelectGroup: (Long?) -> Unit,
-    onAddGroup: () -> Unit
-) {
-    LazyRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        item {
-            FilterChip(
-                selected = selectedGroupId == null,
-                onClick = { onSelectGroup(null) },
-                content = { Text("全部") }
-            )
-        }
-        items(groups, key = { it.id }) { group ->
-            FilterChip(
-                selected = selectedGroupId == group.id,
-                onClick = { onSelectGroup(group.id) },
-                content = { Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            )
-        }
-        item {
-            IconButton(onClick = onAddGroup, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Add, "新建分组")
-            }
-        }
-    }
-}
-
-@Composable
-private fun GroupHeaderItem(name: String) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colors.primary.copy(alpha = 0.08f),
-        shape = MaterialTheme.shapes.small
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.Create,
-                null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colors.primary
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                name,
-                style = MaterialTheme.typography.subtitle2,
-                color = MaterialTheme.colors.primary
-            )
-        }
-    }
-}
-
-@Composable
-fun AddGroupDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var name by rememberSaveable { mutableStateOf("") }
-    Dialog(onDismissRequest = onDismiss) {
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("新建分组", style = MaterialTheme.typography.h6)
-                OutlinedTextField(name, { name = it }, label = { Text("分组名称") }, singleLine = true)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) { Text("取消") }
-                    Spacer(Modifier.width(8.dp))
-                    Button(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) { Text("完成") }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterialApi::class)
-@Composable
-fun GroupSelect(
-    groups: List<ScheduleGroupEntity>,
-    selectedGroupId: Long?,
-    onSelect: (Long?) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val selectedName = groups.find { it.id == selectedGroupId }?.name ?: "无"
-
-    ExposedDropdownMenuBox(modifier = modifier, expanded = expanded, onExpandedChange = { expanded = it }) {
-        TextField(
-            value = selectedName,
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            label = { Text("分组") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            colors = ExposedDropdownMenuDefaults.textFieldColors(backgroundColor = Color.Transparent),
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                onClick = {
-                    expanded = false
-                    onSelect(null)
-                }
-            ) { Text("无") }
-            groups.forEach { group ->
-                DropdownMenuItem(
-                    onClick = {
-                        expanded = false
-                        onSelect(group.id)
-                    }
-                ) { Text(group.name) }
-            }
-        }
-    }
-}
-
 @Composable
 fun ScheduleItem(
     schedule: ScheduleEntity,
     modifier: Modifier = Modifier,
-    groupName: String? = null,
-    onCheck: (Boolean) -> Unit,
-    onEdit: () -> Unit
+    expandAll: Boolean,
+    onCheck: (ScheduleEntity, Boolean) -> Unit,
+    onEdit: (ScheduleEntity) -> Unit
 ) {
     var showDetail by rememberSaveable { mutableStateOf(false) }
 
@@ -341,16 +190,18 @@ fun ScheduleItem(
         modifier = modifier
             .fillMaxWidth()
             .combinedClickable(null, LocalIndication.current, onLongClick = {
-                onEdit()
+                onEdit(schedule)
             }) {
                 showDetail = !showDetail
             }
     ) {
-        Column(Modifier
-            .fillMaxWidth()
-            .padding(8.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+        ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(schedule.isCompleted, { onCheck(it) }, modifier = Modifier.size(64.dp))
+                Checkbox(schedule.isCompleted, { onCheck(schedule, it) }, modifier = Modifier.size(64.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (!schedule.isCompleted) {
@@ -358,13 +209,6 @@ fun ScheduleItem(
                         } else {
                             Text(schedule.title, textDecoration = TextDecoration.LineThrough, color = Color.Gray)
                         }
-                    }
-                    if (groupName != null) {
-                        Text(
-                            groupName,
-                            style = MaterialTheme.typography.caption,
-                            color = MaterialTheme.colors.primary.copy(alpha = 0.7f)
-                        )
                     }
                 }
 
@@ -375,14 +219,17 @@ fun ScheduleItem(
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
                         modifier = Modifier
                             .clickable(null, LocalIndication.current) {
-                                onEdit()
+                                onEdit(schedule)
                             }
                             .padding(8.dp)
                     )
                 }
             }
 
-            AnimatedVisibility(visible = showDetail && schedule.description != null) {
+            AnimatedVisibility(
+                visible = (showDetail || expandAll) && schedule.description != null,
+                enter = expandVertically(animationSpec = tween(150))
+            ) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.width(64.dp))
                     Text(schedule.description ?: "")
@@ -395,28 +242,26 @@ fun ScheduleItem(
 @Composable
 fun ScheduleEditor(
     initial: ScheduleEntity?,
-    groups: List<ScheduleGroupEntity> = emptyList(),
     onDismiss: () -> Unit,
-    onComplete: (String, String?, Long?, Long?) -> Unit,
+    onComplete: (String, String?, Long?, String?) -> Unit,
     onDelete: () -> Unit
 ) {
     var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
     var desc by rememberSaveable { mutableStateOf(initial?.description) }
     var due by rememberSaveable { mutableStateOf(initial?.due) }
-    var groupId by rememberSaveable { mutableStateOf(initial?.groupId) }
+    var groupName by rememberSaveable { mutableStateOf(initial?.groupName) }
 
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        if (groups.isNotEmpty()) {
-            GroupSelect(groups, groupId, { groupId = it }, Modifier.fillMaxWidth())
-        }
         OutlinedTextField(title, { title = it }, label = { Text("标题") })
         OutlinedTextField(desc ?: "", { desc = it }, label = { Text("描述") })
 
         Row {
-            DateTimePickerButton(due, { due = it })
+            DateTimePickerButton(due) { due = it }
             Spacer(Modifier.width(4.dp))
             TextButton({ due = null }) { Text("清除") }
         }
+
+        OutlinedTextField(groupName ?: "", { groupName = it }, label = { Text("分组") })
 
         Row(Modifier.fillMaxWidth()) {
             TextButton({
@@ -428,7 +273,7 @@ fun ScheduleEditor(
 
             TextButton({ onDismiss() }) { Text("取消") }
             Button({
-                onComplete(title, desc, due, groupId)
+                onComplete(title, desc, due, groupName)
                 onDismiss()
             }, enabled = title.isNotBlank()) { Text("完成") }
         }
