@@ -1,7 +1,6 @@
 package com.destywen.mydroid.ui.screen
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -53,6 +52,7 @@ import com.destywen.mydroid.ui.screen.home.HomeScreen
 import com.destywen.mydroid.ui.screen.journal.JournalScreen
 import com.destywen.mydroid.ui.screen.log.LogScreen
 import com.destywen.mydroid.ui.screen.schedule.ScheduleScreen
+import com.destywen.mydroid.ui.screen.settings.SettingsScreen
 import com.destywen.mydroid.util.slideInFromLeft
 import com.destywen.mydroid.util.slideInFromRight
 import com.destywen.mydroid.util.slideOutToLeft
@@ -129,7 +129,7 @@ fun MainApp() {
                 HomeScreen { scope.launch { drawerState.open() } }
             }
             composable(Screen.Settings.route) {
-                HomeScreen { scope.launch { drawerState.open() } }
+                SettingsScreen { scope.launch { drawerState.open() } }
             }
             composable(Screen.Log.route) {
                 LogScreen { scope.launch { drawerState.open() } }

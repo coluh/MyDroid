@@ -68,6 +68,7 @@ import coil3.compose.AsyncImage
 import com.destywen.mydroid.MyApplication
 import com.destywen.mydroid.R
 import com.destywen.mydroid.data.local.AppSettings
+import com.destywen.mydroid.data.local.Keys
 import com.destywen.mydroid.data.local.UserEntity
 import com.destywen.mydroid.data.remote.AiChatService
 import com.destywen.mydroid.domain.ChatRepository
@@ -78,6 +79,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
@@ -335,7 +337,7 @@ class ChatListViewModel(
         repository.getAllConversations().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val users: StateFlow<List<UserEntity>> =
         repository.getUsers().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-    val selfId: StateFlow<Long?> = settings.userId.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val selfId: StateFlow<Long?> = settings.config.map { it.userId }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val error = MutableStateFlow<String?>(null)
 
     fun createUser(name: String, avatar: Uri?) = viewModelScope.launch(Dispatchers.IO) {
@@ -346,7 +348,7 @@ class ChatListViewModel(
     }
 
     fun setSelf(userId: Long) = viewModelScope.launch {
-        settings.updateUserId(userId)
+        settings.update { it[Keys.USER_ID] = userId }
     }
 
     fun clear() = viewModelScope.launch {

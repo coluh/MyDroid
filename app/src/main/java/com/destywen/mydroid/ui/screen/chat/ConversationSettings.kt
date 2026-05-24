@@ -49,6 +49,7 @@ import com.destywen.mydroid.domain.model.ConversationType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -165,7 +166,7 @@ class ConversationSettingsViewModel(
     val state = combine(
         repository.getMemberIds(convId),
         repository.getLlmConfigs(),
-        settings.userId,
+        settings.config.map { it.userId },
     ) { members, llmConfigs, selfId ->
         if (convType == ConversationType.PRIVATE) {
             val otherId = members.find { it != selfId }

@@ -53,26 +53,38 @@ object NetworkModule {
     }
 }
 
+data class ApiConfig(
+    val endpoint: String? = null,
+    val apiKey: String? = null,
+    val model: String? = null,
+    val visionModel: String? = null,
+    val systemPrompt: String = "You are a helpful assistant.",
+    val temperature: Float = 0.7f,
+    val maxTokens: Int = 2048,
+    val topP: Float = 0.9f,
+)
+
 class AiChatService(private val client: HttpClient, settings: AppSettings) {
 
     private val json = Json { ignoreUnknownKeys = true }
-    private val defaultEndpoint = settings.defaultEndpoint
-    private val defaultApiKey = settings.defaultApiKey
-    private val visionModel = settings.vlModel
+    private val defaultConfig = settings.config
 
-    suspend fun callLlm(context: List<ApiMessage>, config: LlmConfigEntity): Result<String> =
+    suspend fun callLlm(context: List<ApiMessage>, config: ApiConfig, image: File? = null): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val endpoint = when (config.provider) {
-                    "deepseek" -> "https://api.deepseek.com/chat/completions"
-                    else -> defaultEndpoint.first()
-                } ?: error("endpoint not set")
+                val default = defaultConfig.first()
+                val endpoint = config.endpoint ?: default.defaultEndpoint ?: error("endpoint not set")
+                val apiKey = config.apiKey ?: default.defaultApiKey ?: error("apiKey not set")
+                val model = config.model ?: default.defaultModel ?: error("model not set")
+                val visionModel = if (image == null) null else {
+                    config.visionModel ?: default.defaultVisionModel ?: error("vision model not set")
+                }
                 val response = client.post(endpoint) {
-                    header(HttpHeaders.Authorization, "Bearer ${config.apiKey}")
+                    header(HttpHeaders.Authorization, "Bearer ${apiKey}")
                     contentType(ContentType.Application.Json)
                     setBody(
                         ChatRequest(
-                            model = config.model,
+                            model = model,
                             messages = listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context,
                             stream = false,
                             temperature = config.temperature.toDouble(),
@@ -92,30 +104,30 @@ class AiChatService(private val client: HttpClient, settings: AppSettings) {
             }
         }
 
-    suspend fun chat(context: List<ApiMessage>, config: AgentEntity, image: File? = null): Result<String> =
+    suspend fun chat(context: List<ApiMessage>, config: LlmConfigEntity, image: File? = null): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val response = if (image == null) {
                     val prompt = listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context
-                    val endpoint = config.apiEndpoint ?: defaultEndpoint.first()
-                    val apiKey = config.apiKey ?: defaultApiKey.first()
+                    val endpoint = config.provider ?: defaultConfig.first().defaultEndpoint
+                    val apiKey = config.apiKey ?: defaultConfig.first().defaultApiKey
                     if (endpoint == null) {
                         error("endpoint not set")
                     }
                     AppLogger.i(
                         "chat",
-                        "request to ${endpoint}, model: ${config.modelName}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
+                        "request to ${endpoint}, model: ${config.model}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
                     )
 //                    AppLogger.d("chat", "$prompt")
                     client.post(endpoint) {
                         header(HttpHeaders.Authorization, "Bearer $apiKey")
                         contentType(ContentType.Application.Json)
-                        setBody(ChatRequest(config.modelName, prompt, stream = false))
+                        setBody(ChatRequest(config.model, prompt, stream = false))
                     }
                 } else {
-                    val endpoint = config.apiEndpoint ?: defaultEndpoint.first()
-                    val apiKey = config.apiKey ?: defaultApiKey.first()
-                    val model = visionModel.first()
+                    val endpoint = config.endpoint ?: defaultConfig.first().defaultEndpoint
+                    val apiKey = config.apiKey ?: defaultConfig.first().defaultApiKey
+                    val model = defaultConfig.first().defaultVisionModel
                     if (endpoint.isNullOrBlank()) error("endpoint not set")
                     if (model.isNullOrBlank()) error("vision model not set")
 
@@ -166,8 +178,8 @@ class AiChatService(private val client: HttpClient, settings: AppSettings) {
 
     fun chatStreaming(context: List<ApiMessage>, config: AgentEntity): Flow<String> = channelFlow {
         val prompt = listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context
-        val endpoint = config.apiEndpoint ?: defaultEndpoint.first()
-        val apiKey = config.apiKey ?: defaultApiKey.first()
+        val endpoint = config.apiEndpoint ?: defaultConfig.first().defaultEndpoint
+        val apiKey = config.apiKey ?: defaultConfig.first().defaultApiKey
         if (endpoint == null) {
             error("endpoint not set")
         }

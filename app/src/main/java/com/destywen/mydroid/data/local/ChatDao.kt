@@ -35,7 +35,12 @@ data class LlmConfigEntity(
     val maxTokens: Int = 2048,
     val topP: Float = 0.9f,
     val createdAt: Long = System.currentTimeMillis(),
-)
+) {
+    val endpoint: String? get() = when (provider) {
+        "deepseek" -> "https://api.deepseek.com/chat/completions"
+        else -> null
+    }
+}
 
 @Entity(tableName = "conversations")
 data class ConversationEntity(
@@ -189,6 +194,7 @@ interface ChatDao {
     fun getAgents(): Flow<List<AgentEntity>>
 }
 
+@Deprecated("已改为LlmConfig，附着于User")
 @Entity(tableName = "chat_agents")
 @Parcelize
 data class AgentEntity(
@@ -205,7 +211,7 @@ data class AgentEntity(
         get() = "$name-${modelName.take(3)}"
 }
 
-// only in old version
+@Deprecated("已改为更统一的平等聊天系统")
 @Entity(
     tableName = "chat_messages", foreignKeys = [ForeignKey(
         entity = AgentEntity::class, parentColumns = ["id"], childColumns = ["agentId"]

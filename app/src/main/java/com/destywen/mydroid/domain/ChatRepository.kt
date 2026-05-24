@@ -3,6 +3,7 @@ package com.destywen.mydroid.domain
 import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.ChatDao
 import com.destywen.mydroid.data.local.ConversationEntity
+import com.destywen.mydroid.data.local.Keys
 import com.destywen.mydroid.data.local.LlmConfigEntity
 import com.destywen.mydroid.data.local.MemberEntity
 import com.destywen.mydroid.data.local.MessageEntity
@@ -23,7 +24,7 @@ class ChatRepository(private val chatDao: ChatDao, private val settings: AppSett
             chatDao.getAllMembers(),
             chatDao.getAllUsers(),
             chatDao.getLatestMessagesPerConv(),
-            settings.userId,
+            settings.config.map { it.userId },
         ) { convs, members, users, latestMessages, selfId ->
             val latestMsgMap = latestMessages.associateBy { it.convId }
             convs.mapNotNull { conv ->
@@ -73,8 +74,8 @@ class ChatRepository(private val chatDao: ChatDao, private val settings: AppSett
             avatar = avatar,
         )
         val userId = chatDao.insertUser(user)
-        if (settings.userId.first() == null || settings.userId.first() == 0L) {
-            settings.updateUserId(userId)
+        if (settings.config.map { it.userId }.first() == null || settings.config.map { it.userId }.first() == 0L) {
+            settings.update { it[Keys.USER_ID] = userId }
         }
 
         // create private conversation
@@ -88,7 +89,7 @@ class ChatRepository(private val chatDao: ChatDao, private val settings: AppSett
         )
         val convId = chatDao.insertConversation(conversation)
         chatDao.addMember(MemberEntity(convId, userId, 0, current))
-        val selfId = settings.userId.first()!!
+        val selfId = settings.config.map { it.userId }.first()!!
         if (userId != selfId) {
             chatDao.addMember(MemberEntity(convId, selfId, 0, current))
         }
@@ -98,7 +99,7 @@ class ChatRepository(private val chatDao: ChatDao, private val settings: AppSett
         return combine(
             chatDao.getMessagesByConversation(convId),
             chatDao.getAllUsers(),
-            settings.userId
+            settings.config.map { it.userId }
         ) { entities, users, userId ->
             entities.map { entity ->
                 val user = users.find { it.id == entity.senderId }
@@ -177,6 +178,6 @@ class ChatRepository(private val chatDao: ChatDao, private val settings: AppSett
         chatDao.getAllMembers().first().forEach { member ->
             chatDao.removeMember(member.convId, member.userId)
         }
-        settings.updateUserId(0)
+        settings.update { it[Keys.USER_ID] = 0 } // TODO: ?? should be null
     }
 }

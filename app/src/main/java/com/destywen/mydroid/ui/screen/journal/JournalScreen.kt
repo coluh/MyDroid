@@ -20,7 +20,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,8 +40,6 @@ import androidx.compose.material.Chip
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.ExposedDropdownMenuBox
-import androidx.compose.material.ExposedDropdownMenuDefaults
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
@@ -71,6 +68,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -91,10 +89,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.destywen.mydroid.MyApplication
 import com.destywen.mydroid.R
-import com.destywen.mydroid.data.local.AgentEntity
-import com.destywen.mydroid.ui.components.AgentCard
 import com.destywen.mydroid.ui.components.BottomModal
 import com.destywen.mydroid.util.toDateTimeString
+import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
 import java.io.File
 
@@ -112,12 +109,15 @@ fun JournalScreen(onNavigate: () -> Unit) {
     val app = LocalContext.current.applicationContext as MyApplication
     val viewModel: JournalViewModel = viewModel(factory = JournalViewModel.Factory(app))
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val username = state.username ?: stringResource(R.string.username)
+
     var activeModal by rememberSaveable { mutableStateOf<JournalModal>(JournalModal.None) }
     var query by rememberSaveable { mutableStateOf<String?>(null) }
     var showHideTags by rememberSaveable { mutableStateOf(false) }
+
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val username = stringResource(R.string.username)
 
     val importLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) {
         it?.let {
@@ -303,15 +303,13 @@ fun JournalScreen(onNavigate: () -> Unit) {
                     activeModal = JournalModal.None
                 })
 
-                is JournalModal.Setting -> JournalSetting(
-                    state.replyAgent,
-                    state.allAgents,
-                    state.visionModalName,
-                    onSelect = {
-                        viewModel.selectReplyAgent(it)
-                    }, onChange = {
-                        viewModel.updateVisionModel(it)
-                    })
+                is JournalModal.Setting -> JournalSetting(state.replyPrompt) {
+                    viewModel.updateJournalPrompt(it)
+                    activeModal = JournalModal.None
+                    scope.launch {
+                        snackbarHostState.showSnackbar("提示词已更新")
+                    }
+                }
 
                 else -> {}
             }
@@ -558,60 +556,21 @@ fun JournalComment(onSend: (String) -> Unit) {
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun JournalSetting(
-    agent: AgentEntity?,
-    allAgents: List<AgentEntity>,
-    visionModel: String?,
-    onSelect: (id: Long) -> Unit,
-    onChange: (String) -> Unit
+    replyPrompt: String?,
+    onSave: (String) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var text by rememberSaveable { mutableStateOf(replyPrompt ?: "") }
 
     Column(
         Modifier
             .fillMaxWidth()
             .padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        ExposedDropdownMenuBox(
-            expanded = expanded, onExpandedChange = { expanded = it }
-        ) {
-            TextField(
-                value = agent?.display ?: "---",
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                singleLine = true,
-                modifier = Modifier.clickable(null, LocalIndication.current) {
-                    expanded = true
-                }
-            )
-            ExposedDropdownMenu(
-                expanded = expanded, onDismissRequest = { expanded = false },
-                modifier = Modifier.background(MaterialTheme.colors.background)
-            ) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(8.dp, 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    allAgents.forEach { agent ->
-                        DropdownMenuItem(
-                            onClick = {
-                                expanded = false
-                                onSelect(agent.id)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth(),
-                            contentPadding = PaddingValues(0.dp)
-                        ) {
-                            AgentCard(agent, modifier = Modifier.clickable(null, LocalIndication.current) {
-                                onSelect(agent.id)
-                            })
-                        }
-                    }
-                }
-            }
+        OutlinedTextField(text, { text = it }, label = { Text("回复提示词") })
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Button(onClick = {
+                onSave(text)
+            }) { Text("保存") }
         }
-
-        OutlinedTextField(visionModel ?: "", { onChange(it) }, label = { Text("视觉理解模型") })
     }
 }

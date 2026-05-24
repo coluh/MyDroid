@@ -51,6 +51,7 @@ import com.destywen.mydroid.data.remote.ApiMessage
 import com.destywen.mydroid.domain.ChatRepository
 import com.destywen.mydroid.domain.model.Message
 import com.destywen.mydroid.domain.model.MessageType
+import com.destywen.mydroid.util.toRequestConfig
 import com.destywen.mydroid.util.toSmartTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -59,6 +60,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -78,7 +80,7 @@ class ConversationViewModel(
 ) : ViewModel() {
 
     private val _messages = repository.getMessages(convId)
-    private val _selfId = settings.userId
+    private val _selfId = settings.config.map { it.userId }
     private val _status = MutableStateFlow<String?>(null)
 
     val state = combine(_messages, _selfId, _status) { messages, selfId, error ->
@@ -116,7 +118,7 @@ class ConversationViewModel(
             val context = mergeRounds(messages, selfId, aiId)
 
             _status.update { "writing..." }
-            service.callLlm(context, config)
+            service.callLlm(context, config.toRequestConfig())
                 .onSuccess {
                     sendMessage(convId, it, aiId)
                     _status.update { null }
