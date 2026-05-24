@@ -63,7 +63,9 @@ class FileManager(private val context: Context) {
                 val format = if (hasAlpha) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
                 val quality = if (hasAlpha) 100 else 80
 
-                File(File(context.filesDir, "img"), name).outputStream().use { resized.compress(format, quality, it) }
+                val imgDir = File(context.filesDir, "img")
+                if (!imgDir.exists()) imgDir.mkdirs()
+                File(imgDir, name).outputStream().use { resized.compress(format, quality, it) }
                 name
             }
         }

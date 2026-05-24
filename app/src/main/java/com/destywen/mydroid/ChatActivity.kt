@@ -51,10 +51,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.destywen.mydroid.data.local.AgentEntity
 import com.destywen.mydroid.data.local.AppSettings
 import com.destywen.mydroid.data.local.Role
 import com.destywen.mydroid.data.remote.AiChatService
+import com.destywen.mydroid.data.remote.ApiConfig
 import com.destywen.mydroid.data.remote.ApiMessage
 import com.destywen.mydroid.data.remote.NetworkModule
 import com.destywen.mydroid.ui.theme.MyDroidTheme
@@ -92,12 +92,7 @@ fun ChatFloating(initialText: String, service: AiChatService, onDismiss: () -> U
 //    val screenHeight = LocalWindowInfo.current.containerSize.height.dp // 实测并不准！！反倒下面的写法准确
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
 
-
-    val config = AgentEntity(
-        name = "qwen3.5-plus",
-        modelName = "qwen3.5-plus",
-        systemPrompt = "你是一个有帮助的助手，回复简洁有用。禁止使用任何Markdown格式。"
-    )
+    val config = ApiConfig(model = "deepseek-v4-flash", systemPrompt = "你是一个有帮助的助手，回复简洁有用。禁止使用任何Markdown格式。")
     var currentJob: Job? = null
 
     // call with current context, add assistant message or fail
@@ -106,7 +101,7 @@ fun ChatFloating(initialText: String, service: AiChatService, onDismiss: () -> U
             var response = ""
             context = context + ApiMessage(Role.ASSISTANT, response)
             runCatching {
-                service.chatStreaming(context, config).collect { token ->
+                service.streamLlm(context, config).collect { token ->
                     response += token
                     context = context.dropLast(1) + ApiMessage(Role.ASSISTANT, response)
                 }
@@ -141,10 +136,12 @@ fun ChatFloating(initialText: String, service: AiChatService, onDismiss: () -> U
             backgroundColor = MaterialTheme.colors.background,
         ) {
             Column(Modifier.fillMaxSize()) {
-                Column(Modifier
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
-                    .weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp)
+                        .weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Surface {
                         Text(
                             "> $initialText",
@@ -167,7 +164,7 @@ fun ChatFloating(initialText: String, service: AiChatService, onDismiss: () -> U
                     ) {
                         items(context.drop(1), { it.hashCode() }) {
                             if (it.role == Role.ASSISTANT) {
-                                Text("${config.modelName}: ${it.content}", style = MaterialTheme.typography.body2)
+                                Text("${config.model}: ${it.content}", style = MaterialTheme.typography.body2)
                             } else {
                                 Text(it.content, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.body2)
                             }

@@ -1,10 +1,8 @@
 package com.destywen.mydroid.data.local
 
-import android.os.Parcelable
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Entity
-import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -12,7 +10,6 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
-import kotlinx.parcelize.Parcelize
 
 @Entity(tableName = "users")
 data class UserEntity(
@@ -36,10 +33,11 @@ data class LlmConfigEntity(
     val topP: Float = 0.9f,
     val createdAt: Long = System.currentTimeMillis(),
 ) {
-    val endpoint: String? get() = when (provider) {
-        "deepseek" -> "https://api.deepseek.com/chat/completions"
-        else -> null
-    }
+    val endpoint: String?
+        get() = when (provider) {
+            "deepseek" -> "https://api.deepseek.com/chat/completions"
+            else -> null
+        }
 }
 
 @Entity(tableName = "conversations")
@@ -189,37 +187,34 @@ interface ChatDao {
 
     @Query("SELECT * FROM attachments WHERE attachmentId = :attachmentId")
     suspend fun getAttachmentById(attachmentId: String): AttachmentEntity?
-
-    @Query("SELECT * FROM chat_agents")
-    fun getAgents(): Flow<List<AgentEntity>>
 }
 
-@Deprecated("已改为LlmConfig，附着于User")
-@Entity(tableName = "chat_agents")
-@Parcelize
-data class AgentEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val name: String,
-    val systemPrompt: String,
-    val modelName: String,
-    val apiEndpoint: String? = null,
-    val apiKey: String? = null,
-    val temperature: Float = 0.7f,
-    val createdAt: Long = System.currentTimeMillis(),
-) : Parcelable {
-    val display: String
-        get() = "$name-${modelName.take(3)}"
-}
-
-@Deprecated("已改为更统一的平等聊天系统")
-@Entity(
-    tableName = "chat_messages", foreignKeys = [ForeignKey(
-        entity = AgentEntity::class, parentColumns = ["id"], childColumns = ["agentId"]
-    )], indices = [Index("agentId")]
-)
-data class ChatMessageEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0, val agentId: Long? = null,
-    // val username,
-    val role: String, // "user" | "assistant"
-    val content: String, val timestamp: Long = System.currentTimeMillis()
-)
+//@Deprecated("已改为LlmConfig，附着于User")
+//@Entity(tableName = "chat_agents")
+//@Parcelize
+//data class AgentEntity(
+//    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+//    val name: String,
+//    val systemPrompt: String,
+//    val modelName: String,
+//    val apiEndpoint: String? = null,
+//    val apiKey: String? = null,
+//    val temperature: Float = 0.7f,
+//    val createdAt: Long = System.currentTimeMillis(),
+//) : Parcelable {
+//    val display: String
+//        get() = "$name-${modelName.take(3)}"
+//}
+//
+//@Deprecated("已改为更统一的平等聊天系统")
+//@Entity(
+//    tableName = "chat_messages", foreignKeys = [ForeignKey(
+//        entity = AgentEntity::class, parentColumns = ["id"], childColumns = ["agentId"]
+//    )], indices = [Index("agentId")]
+//)
+//data class ChatMessageEntity(
+//    @PrimaryKey(autoGenerate = true) val id: Long = 0, val agentId: Long? = null,
+//    // val username,
+//    val role: String, // "user" | "assistant"
+//    val content: String, val timestamp: Long = System.currentTimeMillis()
+//)

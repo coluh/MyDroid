@@ -1,9 +1,7 @@
 package com.destywen.mydroid.data.remote
 
 import android.util.Base64
-import com.destywen.mydroid.data.local.AgentEntity
 import com.destywen.mydroid.data.local.AppSettings
-import com.destywen.mydroid.data.local.LlmConfigEntity
 import com.destywen.mydroid.data.local.Role
 import com.destywen.mydroid.domain.AppLogger
 import io.ktor.client.HttpClient
@@ -75,134 +73,95 @@ class AiChatService(private val client: HttpClient, settings: AppSettings) {
                 val default = defaultConfig.first()
                 val endpoint = config.endpoint ?: default.defaultEndpoint ?: error("endpoint not set")
                 val apiKey = config.apiKey ?: default.defaultApiKey ?: error("apiKey not set")
-                val model = config.model ?: default.defaultModel ?: error("model not set")
-                val visionModel = if (image == null) null else {
+                val model = if (image == null) {
+                    config.model ?: default.defaultModel ?: error("model not set")
+                } else {
                     config.visionModel ?: default.defaultVisionModel ?: error("vision model not set")
                 }
+                val messages = if (image == null) {
+                    listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context
+                } else emptyList()
+                val visionMessages = if (image != null) {
+                    val imageBase64 = FileInputStream(image).use { inputStream ->
+                        val bytes = inputStream.readBytes()
+                        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        "data:image/${image.extension};base64,$base64"
+                    }
+                    val contentImg = ContentVision(type = "image_url", imageUrl = ContentImage(imageBase64))
+                    val contentTxt =
+                        ContentVision(type = "text", text = config.systemPrompt + "\n\n" + context[0].content)
+                    val messageFirst = MessageVision(Role.USER, listOf(contentImg, contentTxt))
+                    listOf(messageFirst) + context.drop(1).map {
+                        MessageVision(it.role, listOf(ContentVision(type = "text", text = it.content)))
+                    }
+                } else emptyList()
+
                 val response = client.post(endpoint) {
-                    header(HttpHeaders.Authorization, "Bearer ${apiKey}")
+                    header(HttpHeaders.Authorization, "Bearer $apiKey")
                     contentType(ContentType.Application.Json)
                     setBody(
-                        ChatRequest(
-                            model = model,
-                            messages = listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context,
-                            stream = false,
-                            temperature = config.temperature.toDouble(),
-                            topP = config.topP.toDouble(),
-                            maxTokens = config.maxTokens,
-                            enableThinking = false,
-                        )
+                        if (image == null) {
+                            ChatRequest(
+                                model = model,
+                                messages = messages,
+                                stream = false,
+                                temperature = config.temperature.toDouble(),
+                                topP = config.topP.toDouble(),
+                                maxTokens = config.maxTokens,
+                                enableThinking = false,
+                            )
+                        } else {
+                            ChatRequestVision(
+                                model = model,
+                                messages = visionMessages,
+                                stream = false,
+                                temperature = config.temperature.toDouble(),
+                                topP = config.topP.toDouble(),
+                                maxTokens = config.maxTokens,
+                                enableThinking = false,
+                            )
+                        }
                     )
                 }
+
                 if (!response.status.isSuccess()) {
                     val body = response.bodyAsText()
                     val message = runCatching { json.decodeFromString<ChatErrorWrapper>(body).error.message }
                         .getOrElse { body }
                     error("status ${response.status.value}, response: $message")
                 }
+
                 response.body<ChatResponse>().choices[0].message.content
-            }
-        }
-
-    suspend fun chat(context: List<ApiMessage>, config: LlmConfigEntity, image: File? = null): Result<String> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val response = if (image == null) {
-                    val prompt = listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context
-                    val endpoint = config.provider ?: defaultConfig.first().defaultEndpoint
-                    val apiKey = config.apiKey ?: defaultConfig.first().defaultApiKey
-                    if (endpoint == null) {
-                        error("endpoint not set")
-                    }
-                    AppLogger.i(
-                        "chat",
-                        "request to ${endpoint}, model: ${config.model}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
-                    )
-//                    AppLogger.d("chat", "$prompt")
-                    client.post(endpoint) {
-                        header(HttpHeaders.Authorization, "Bearer $apiKey")
-                        contentType(ContentType.Application.Json)
-                        setBody(ChatRequest(config.model, prompt, stream = false))
-                    }
-                } else {
-                    val endpoint = config.endpoint ?: defaultConfig.first().defaultEndpoint
-                    val apiKey = config.apiKey ?: defaultConfig.first().defaultApiKey
-                    val model = defaultConfig.first().defaultVisionModel
-                    if (endpoint.isNullOrBlank()) error("endpoint not set")
-                    if (model.isNullOrBlank()) error("vision model not set")
-
-                    val imageBase64 = FileInputStream(image).use { inputStream ->
-                        val bytes = inputStream.readBytes()
-                        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                        "data:image/${image.extension};base64,$base64"
-                    }
-                    val content1img = ContentVision(type = "image_url", imageUrl = ContentImage(imageBase64))
-                    val content1txt =
-                        ContentVision(type = "text", text = config.systemPrompt + "\n\n" + context[0].content)
-                    val prompt1 = MessageVision(Role.USER, listOf(content1img, content1txt))
-                    val prompt = listOf(prompt1) + context.drop(1).map {
-                        MessageVision(it.role, listOf(ContentVision(type = "text", text = it.content)))
-                    }
-                    AppLogger.i(
-                        "chat",
-                        "request to ${endpoint}, model: $model, with ${prompt.size} messages"
-                    )
-//                    AppLogger.d("chat", "$prompt")
-//                    val bodyJson = json.encodeToString(ChatRequestVision(model, prompt, stream = false))
-//                    AppLogger.d("chat", "body: $bodyJson")
-                    client.post(endpoint) {
-                        header(HttpHeaders.Authorization, "Bearer $apiKey")
-                        contentType(ContentType.Application.Json)
-                        setBody(ChatRequestVision(model, prompt, stream = false, enableThinking = false))
-                    }
-                }
-
-                if (!response.status.isSuccess()) {
-                    val body = response.bodyAsText()
-                    val message = runCatching {
-                        json.decodeFromString<ChatErrorWrapper>(body).error.message
-                    }.getOrElse {
-                        AppLogger.w("chat", "fail to parse error body: ${it.message}, body: $body")
-                        body
-                    }
-                    error("HTTP status ${response.status.value}, response message: $message")
-                }
-
-                val body = response.body<ChatResponse>()
-                AppLogger.i("chat", "${body.usage}")
-                body.choices.first().message.content
             }.onFailure {
                 AppLogger.e("chat", it.message ?: "unknown error")
             }
         }
 
-    fun chatStreaming(context: List<ApiMessage>, config: AgentEntity): Flow<String> = channelFlow {
-        val prompt = listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context
-        val endpoint = config.apiEndpoint ?: defaultConfig.first().defaultEndpoint
-        val apiKey = config.apiKey ?: defaultConfig.first().defaultApiKey
-        if (endpoint == null) {
-            error("endpoint not set")
-        }
-        val thinking = if (config.modelName.contains("qwen3.5")) false else null // don't want default think
-        AppLogger.i(
-            "chatStreaming",
-            "request to ${endpoint}, model: ${config.modelName}, system prompt: ${config.systemPrompt.isNotBlank()}, with ${context.size} messages"
-        )
-        AppLogger.d("chatStreaming", "$prompt")
+    fun streamLlm(context: List<ApiMessage>, config: ApiConfig): Flow<String> = channelFlow {
+        val default = defaultConfig.first()
+        val endpoint = config.endpoint ?: default.defaultEndpoint ?: error("endpoint not set")
+        val apiKey = config.apiKey ?: default.defaultApiKey ?: error("apiKey not set")
+        val model = config.model ?: default.defaultModel ?: error("model not set")
         client.preparePost(endpoint) {
             header(HttpHeaders.Authorization, "Bearer $apiKey")
             contentType(ContentType.Application.Json)
-            setBody(ChatRequest(config.modelName, prompt, stream = true, enableThinking = thinking))
+            setBody(
+                ChatRequest(
+                    model = model,
+                    messages = listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context,
+                    stream = true,
+                    temperature = config.temperature.toDouble(),
+                    topP = config.topP.toDouble(),
+                    maxTokens = config.maxTokens,
+                    enableThinking = false,
+                )
+            )
         }.execute { response ->
             if (!response.status.isSuccess()) {
                 val body = response.bodyAsText()
-                val message = runCatching {
-                    json.decodeFromString<ChatErrorWrapper>(body).error.message
-                }.getOrElse {
-                    AppLogger.w("chat", "fail to parse error body: ${it.message}, body: $body")
-                    body
-                }
-                error("HTTP ${response.status.value}: $message")
+                val message = runCatching { json.decodeFromString<ChatErrorWrapper>(body).error.message }
+                    .getOrElse { body }
+                error("status ${response.status.value}, response: $message")
             }
 
             val channel = response.bodyAsChannel()
@@ -217,6 +176,7 @@ class AiChatService(private val client: HttpClient, settings: AppSettings) {
                 }.getOrElse {
                     error("fail to parse chunk: ${it.message}, data: $data")
                 }
+
                 chunk.choices.firstOrNull()?.delta?.content?.let {
                     send(it)
                 }

@@ -9,11 +9,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
-        JournalEntity::class, CommentEntity::class, AgentEntity::class, ChatMessageEntity::class, LogEntity::class,
+        JournalEntity::class, CommentEntity::class, LogEntity::class,
         ScheduleEntity::class, UserEntity::class, LlmConfigEntity::class,
         ConversationEntity::class, MemberEntity::class, MessageEntity::class, AttachmentEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -32,7 +32,7 @@ abstract class AppDatabase : RoomDatabase() {
                     .addMigrations(
                         migration1to2, migration2to3, migration3to4, migration4to5,
                         migration5to6, migration6to7, migration7to8, migration8to9, migration9to10,
-                        migration10to11, migrations11to12
+                        migration10to11, migrations11to12, migration12to13
                     )
                     .build()
                 INSTANCE = instance
@@ -270,6 +270,13 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `schedules` DROP COLUMN `groupId`")
                 db.execSQL("DROP TABLE IF EXISTS `schedule_groups`")
                 db.execSQL("ALTER TABLE `schedules` ADD COLUMN `groupName` TEXT DEFAULT NULL")
+            }
+        }
+
+        val migration12to13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `chat_agents`")
+                db.execSQL("DROP TABLE IF EXISTS `chat_messages`")
             }
         }
     }
