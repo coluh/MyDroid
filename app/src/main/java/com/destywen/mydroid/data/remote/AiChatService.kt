@@ -51,8 +51,9 @@ object NetworkModule {
     }
 }
 
+// used for passing arguments
 data class ApiConfig(
-    val endpoint: String? = null,
+    val endpoint: String? = null, // can pass deepseek/dashscope for convenience
     val apiKey: String? = null,
     val model: String? = null,
     val visionModel: String? = null,
@@ -67,57 +68,97 @@ class AiChatService(private val client: HttpClient, settings: AppSettings) {
     private val json = Json { ignoreUnknownKeys = true }
     private val defaultConfig = settings.config
 
+    suspend fun resolvedConfig(config: ApiConfig): ApiConfig {
+        val default = defaultConfig.first()
+        val ep = config.endpoint ?: default.defaultEndpoint
+        val endpoint = when (ep?.lowercase()) {
+            "deepseek" -> "https://api.deepseek.com/chat/completions"
+            "dashscope" -> "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+            else -> ep
+        }
+        return ApiConfig(
+            endpoint = endpoint,
+            apiKey = config.apiKey ?: default.defaultApiKey,
+            model = config.model ?: default.defaultModel,
+            visionModel = config.visionModel ?: default.defaultVisionModel,
+            systemPrompt = config.systemPrompt,
+            temperature = config.temperature,
+            maxTokens = config.maxTokens,
+            topP = config.topP,
+        )
+    }
+
+    fun toRequestBody(config: ApiConfig, messages: List<ApiMessage>, stream: Boolean, thinking: Boolean): ChatRequest {
+        if (config.endpoint == null) error("endpoint not set")
+        if (config.model == null) error("model not set")
+        val (thinkingConfig, enableThinking) = when {
+            config.endpoint.contains("deepseek") -> ThinkingConfig(if (thinking) "enabled" else "disabled") to null
+            config.endpoint.contains("dashscope") -> null to thinking
+            else -> null to null
+        }
+        return ChatRequest(
+            model = config.model,
+            messages = messages,
+            stream = stream,
+            temperature = config.temperature.toDouble(),
+            topP = config.topP.toDouble(),
+            maxTokens = config.maxTokens,
+            thinking = thinkingConfig,
+            enableThinking = enableThinking,
+        )
+    }
+
     suspend fun callLlm(context: List<ApiMessage>, config: ApiConfig, image: File? = null): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val default = defaultConfig.first()
-                val endpoint = config.endpoint ?: default.defaultEndpoint ?: error("endpoint not set")
-                val apiKey = config.apiKey ?: default.defaultApiKey ?: error("apiKey not set")
-                val model = if (image == null) {
-                    config.model ?: default.defaultModel ?: error("model not set")
-                } else {
-                    config.visionModel ?: default.defaultVisionModel ?: error("vision model not set")
-                }
+                val resolved = resolvedConfig(config)
+                if (resolved.endpoint == null) error("endpoint not set")
+                if (resolved.apiKey == null) error("apiKey not set")
+                if (resolved.model == null) error("model not set")
+                if (context.isEmpty()) error("messages empty")
                 val messages = if (image == null) {
-                    listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context
+                    listOf(ApiMessage(Role.SYSTEM, resolved.systemPrompt)) + context
                 } else emptyList()
                 val visionMessages = if (image != null) {
                     val imageBase64 = FileInputStream(image).use { inputStream ->
                         val bytes = inputStream.readBytes()
                         val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                        "data:image/${image.extension};base64,$base64"
+                        val mime = when (image.extension.lowercase()) {
+                            "jpg" -> "jpeg"
+                            else -> image.extension.lowercase()
+                        }
+                        "data:image/$mime;base64,$base64"
                     }
                     val contentImg = ContentVision(type = "image_url", imageUrl = ContentImage(imageBase64))
+                    // 百炼文档不建议修改vl模型系统提示词，所以拼到第一条消息里吧
                     val contentTxt =
-                        ContentVision(type = "text", text = config.systemPrompt + "\n\n" + context[0].content)
+                        ContentVision(type = "text", text = resolved.systemPrompt + "\n\n" + context[0].content)
                     val messageFirst = MessageVision(Role.USER, listOf(contentImg, contentTxt))
                     listOf(messageFirst) + context.drop(1).map {
                         MessageVision(it.role, listOf(ContentVision(type = "text", text = it.content)))
                     }
                 } else emptyList()
 
-                val response = client.post(endpoint) {
-                    header(HttpHeaders.Authorization, "Bearer $apiKey")
+                if (image == null) {
+                    AppLogger.i("callLlm", "call ${resolved.endpoint} with ${messages.size} messages")
+                } else {
+                    AppLogger.i("callLlm", "call ${resolved.endpoint} with ${visionMessages.size} image messages")
+                }
+                val response = client.post(resolved.endpoint) {
+                    header(HttpHeaders.Authorization, "Bearer ${resolved.apiKey}")
                     contentType(ContentType.Application.Json)
                     setBody(
                         if (image == null) {
-                            ChatRequest(
-                                model = model,
-                                messages = messages,
-                                stream = false,
-                                temperature = config.temperature.toDouble(),
-                                topP = config.topP.toDouble(),
-                                maxTokens = config.maxTokens,
-                                enableThinking = false,
-                            )
+                            toRequestBody(resolved, messages, stream = false, thinking = false)
                         } else {
+                            if (resolved.visionModel == null) error("vision model not set")
                             ChatRequestVision(
-                                model = model,
+                                model = resolved.visionModel,
                                 messages = visionMessages,
                                 stream = false,
-                                temperature = config.temperature.toDouble(),
-                                topP = config.topP.toDouble(),
-                                maxTokens = config.maxTokens,
+                                temperature = resolved.temperature.toDouble(),
+                                topP = resolved.topP.toDouble(),
+                                maxTokens = resolved.maxTokens,
                                 enableThinking = false,
                             )
                         }
@@ -138,24 +179,15 @@ class AiChatService(private val client: HttpClient, settings: AppSettings) {
         }
 
     fun streamLlm(context: List<ApiMessage>, config: ApiConfig): Flow<String> = channelFlow {
-        val default = defaultConfig.first()
-        val endpoint = config.endpoint ?: default.defaultEndpoint ?: error("endpoint not set")
-        val apiKey = config.apiKey ?: default.defaultApiKey ?: error("apiKey not set")
-        val model = config.model ?: default.defaultModel ?: error("model not set")
-        client.preparePost(endpoint) {
-            header(HttpHeaders.Authorization, "Bearer $apiKey")
+        val resolved = resolvedConfig(config)
+        if (resolved.endpoint == null) error("endpoint not set")
+        if (resolved.apiKey == null) error("apiKey not set")
+        if (resolved.model == null) error("model not set")
+        val messages = listOf(ApiMessage(Role.SYSTEM, resolved.systemPrompt)) + context
+        client.preparePost(resolved.endpoint) {
+            header(HttpHeaders.Authorization, "Bearer ${resolved.apiKey}")
             contentType(ContentType.Application.Json)
-            setBody(
-                ChatRequest(
-                    model = model,
-                    messages = listOf(ApiMessage(Role.SYSTEM, config.systemPrompt)) + context,
-                    stream = true,
-                    temperature = config.temperature.toDouble(),
-                    topP = config.topP.toDouble(),
-                    maxTokens = config.maxTokens,
-                    enableThinking = false,
-                )
-            )
+            setBody(toRequestBody(resolved, messages, stream = true, thinking = false))
         }.execute { response ->
             if (!response.status.isSuccess()) {
                 val body = response.bodyAsText()

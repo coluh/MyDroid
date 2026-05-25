@@ -9,13 +9,24 @@ data class Conversation(
     val type: ConversationType,
     val title: String,
     val avatar: String?,
-    val lastMessagePreview: String?,
-    val lastMessageTime: Long,
+    val latestMessagePreview: String?,
+    val latestMessageTime: Long,
     val unreadCount: Int,
 )
 
 enum class MessageType {
     TEXT, IMAGE, FILE;
+
+    companion object {
+        fun from(s: String) = runCatching { valueOf(s.uppercase()) }.getOrDefault(TEXT)
+    }
+}
+
+fun toMessageType(s: String) = when (s) {
+    "text" -> MessageType.TEXT
+    "image" -> MessageType.IMAGE
+    "file" -> MessageType.FILE
+    else -> MessageType.TEXT
 }
 
 data class Message(

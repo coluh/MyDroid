@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,7 +56,6 @@ import com.destywen.mydroid.util.toRequestConfig
 import com.destywen.mydroid.util.toSmartTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -79,7 +79,7 @@ class ConversationViewModel(
     private val service: AiChatService,
 ) : ViewModel() {
 
-    private val _messages = repository.getMessages(convId)
+    private val _messages = repository.getConvMessages(convId)
     private val _selfId = settings.config.map { it.userId }
     private val _status = MutableStateFlow<String?>(null)
 
@@ -96,24 +96,31 @@ class ConversationViewModel(
             return@launch
         }
         repository.sendTextMessage(convId, userId, content)
+        clearUnread()
 
+        if (repository.getConvMembers(convId).first().size == 1) return@launch
         if (userId == _selfId.first()) {
             generateReply()
         }
     }
 
+    fun clearUnread() = viewModelScope.launch {
+        val selfId = _selfId.first() ?: return@launch
+        repository.clearUnread(convId, selfId)
+    }
+
     fun generateReply() {
         generateJob?.cancel()
         generateJob = viewModelScope.launch(Dispatchers.IO) {
-            val members = repository.getMemberIds(convId).first()
+            val members = repository.getConvMembers(convId).first()
             if (members.size != 2) {
                 _status.update { "not supported member count: ${members.size}" }
                 return@launch
             }
 
             val selfId = _selfId.first() ?: return@launch
-            val aiId = members.first { it != selfId }
-            val config = repository.getLlmConfigs().first().find { it.userId == aiId } ?: return@launch
+            val aiId = members.first { it.userId != selfId }.userId
+            val config = repository.getLlmConfig(aiId) ?: return@launch
             val messages = _messages.first()
             val context = mergeRounds(messages, selfId, aiId)
 
@@ -137,7 +144,8 @@ class ConversationViewModel(
         var currentContent = StringBuilder("hi")
 
         for (message in messages) {
-            val role = if (message.senderId == aiId) Role.ASSISTANT else Role.USER
+            val role = if (message.senderId == userId) Role.USER
+            else if (message.senderId == aiId) Role.ASSISTANT else continue
             if (role == currentRole) {
                 currentContent.append("\n").append(message.content)
             } else {
@@ -168,8 +176,8 @@ class ConversationViewModel(
 fun ConversationScreen(convId: Long, onNavigateSettings: () -> Unit, onBack: () -> Unit) {
     val app = LocalContext.current.applicationContext as Application
     val viewModel: ConversationViewModel = viewModel(factory = ConversationViewModel.Factory(convId, app))
-    val state = viewModel.state.collectAsStateWithLifecycle()
-    val messageItems = rememberMessageItems(state.value.messages)
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val messageItems = rememberMessageItems(state.messages)
 
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -181,11 +189,15 @@ fun ConversationScreen(convId: Long, onNavigateSettings: () -> Unit, onBack: () 
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.clearUnread()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 windowInsets = AppBarDefaults.topAppBarWindowInsets,
-                title = { Text(state.value.status ?: stringResource(R.string.chat)) },
+                title = { Text(state.status ?: stringResource(R.string.chat)) },
                 navigationIcon = {
                     IconButton({ onBack() }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null) }
                 },

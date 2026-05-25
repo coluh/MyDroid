@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -52,15 +53,15 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 @Composable
 fun ConversationSettingsScreen(convId: Long, onBack: () -> Unit) {
     val app = LocalContext.current.applicationContext as MyApplication
     val viewModel: ConversationSettingsViewModel =
         viewModel(factory = ConversationSettingsViewModel.Factory(convId, app))
-    val state = viewModel.state.collectAsStateWithLifecycle()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
+    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
@@ -81,9 +82,14 @@ fun ConversationSettingsScreen(convId: Long, onBack: () -> Unit) {
                 .imePadding()
                 .fillMaxSize()
         ) {
-            key(state.value.llmConfig?.id) {
-                LlmConfigEditor(state.value.llmConfig) { entity ->
-                    viewModel.saveLlmConfig(entity)
+            if (state.type != ConversationType.PRIVATE) {
+                Text("仅支持私聊设置")
+            } else {
+                key(state.llmConfig?.id) {
+                    LlmConfigEditor(state.llmConfig) { entity ->
+                        viewModel.saveLlmConfig(entity)
+                        scope.launch { snackbarHostState.showSnackbar("保存成功") }
+                    }
                 }
             }
         }
@@ -154,33 +160,25 @@ data class ConvSettingsUiState(
 )
 
 class ConversationSettingsViewModel(
-    private val convId: Long,
+    convId: Long,
     private val repository: ChatRepository,
     settings: AppSettings,
 ) : ViewModel() {
 
-    private val convType: ConversationType = runBlocking(Dispatchers.IO) {
-        repository.getConvType(convId)
-    }
-
     val state = combine(
-        repository.getMemberIds(convId),
-        repository.getLlmConfigs(),
+        repository.getConvMembers(convId),
+        repository.getAllLlmConfigs(),
         settings.config.map { it.userId },
-    ) { members, llmConfigs, selfId ->
-        if (convType == ConversationType.PRIVATE) {
-            val otherId = members.find { it != selfId }
+    ) { members, configs, selfId ->
+        if (members.size == 2) {
+            val userId = members.first { it.userId != selfId }.userId
             ConvSettingsUiState(
                 type = ConversationType.PRIVATE,
-                userId = otherId,
-                llmConfig = llmConfigs.find { it.userId == otherId },
+                userId = userId,
+                llmConfig = configs.find { it.userId == userId },
             )
         } else {
-            ConvSettingsUiState(
-                type = ConversationType.GROUP,
-                userId = null,
-                llmConfig = null,
-            )
+            ConvSettingsUiState(ConversationType.GROUP, null, null)
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ConvSettingsUiState())
 

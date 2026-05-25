@@ -34,16 +34,17 @@ data class LlmConfigEntity(
     val createdAt: Long = System.currentTimeMillis(),
 ) {
     val endpoint: String?
-        get() = when (provider) {
+        get() = when (provider.lowercase()) {
             "deepseek" -> "https://api.deepseek.com/chat/completions"
-            else -> null
+            "dashscope" -> "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+            else -> provider
         }
 }
 
 @Entity(tableName = "conversations")
 data class ConversationEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val type: String, // "private" | "group"
+    val type: String, // "private" | "group", 没什么用呢，仅标记
     val title: String?, // used for type == "group"
     val avatar: String?, // used for type == "group"
     val createdAt: Long = System.currentTimeMillis(),
@@ -56,7 +57,7 @@ data class ConversationEntity(
 data class MemberEntity(
     val convId: Long,
     val userId: Long,
-    val unread: Int,
+    val unread: Int = 0,
     val joinedAt: Long = System.currentTimeMillis(),
 )
 
@@ -105,18 +106,6 @@ interface ChatDao {
     fun getAllUsers(): Flow<List<UserEntity>>
 
     @Insert
-    suspend fun insertLlmConfig(config: LlmConfigEntity)
-
-    @Update
-    suspend fun updateLlmConfig(config: LlmConfigEntity)
-
-    @Delete
-    suspend fun deleteLlmConfig(config: LlmConfigEntity)
-
-    @Query("SELECT * FROM llm_config")
-    fun getAllLlmConfigs(): Flow<List<LlmConfigEntity>>
-
-    @Insert
     suspend fun insertConversation(conversation: ConversationEntity): Long
 
     @Update
@@ -129,7 +118,25 @@ interface ChatDao {
     fun getAllConversations(): Flow<List<ConversationEntity>>
 
     @Query("SELECT * FROM conversations WHERE id = :id")
-    suspend fun getConversation(id: Long): ConversationEntity
+    suspend fun getConversationById(id: Long): ConversationEntity
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertMember(member: MemberEntity)
+
+    @Update
+    suspend fun updateMember(member: MemberEntity)
+
+    @Query("DELETE FROM members WHERE convId = :convId AND userId = :userId")
+    suspend fun removeConvMember(convId: Long, userId: Long)
+
+    @Query("DELETE FROM members WHERE convId = :convId")
+    suspend fun removeConvMembers(convId: Long)
+
+    @Query("SELECT * FROM members")
+    fun getAllMembers(): Flow<List<MemberEntity>>
+
+    @Query("SELECT * FROM members WHERE convId = :convId")
+    fun getConvMembers(convId: Long): Flow<List<MemberEntity>>
 
     @Insert
     suspend fun insertMessage(message: MessageEntity): Long
@@ -140,44 +147,8 @@ interface ChatDao {
     @Delete
     suspend fun deleteMessage(message: MessageEntity)
 
-    @Query("SELECT * FROM messages WHERE convId = :convId ORDER BY timestamp ASC")
-    fun getMessagesByConversation(convId: Long): Flow<List<MessageEntity>>
-
-    @Query(
-        """
-        SELECT * FROM messages WHERE (convId, timestamp) IN (
-            SELECT convId, MAX(timestamp) FROM messages GROUP BY convId
-        )
-    """
-    )
-    fun getLatestMessagesPerConv(): Flow<List<MessageEntity>>
-
     @Query("DELETE FROM messages WHERE convId = :convId")
-    suspend fun deleteMessagesByConversation(convId: Long)
-
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun addMember(member: MemberEntity)
-
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun addMembers(members: List<MemberEntity>)
-
-    @Update
-    suspend fun updateMember(member: MemberEntity)
-
-    @Query("UPDATE members SET unread = unread + 1 WHERE convId = :convId AND userId != :senderId")
-    suspend fun incrementUnread(convId: Long, senderId: Long)
-
-    @Query("SELECT * FROM members WHERE convId = :convId")
-    fun getMembers(convId: Long): Flow<List<MemberEntity>>
-
-    @Query("SELECT * FROM members")
-    fun getAllMembers(): Flow<List<MemberEntity>>
-
-    @Query("DELETE FROM members WHERE convId = :convId AND userId = :userId")
-    suspend fun removeMember(convId: Long, userId: Long)
-
-    @Query("DELETE FROM members WHERE convId = :convId")
-    suspend fun removeAllMembers(convId: Long)
+    suspend fun deleteMessagesByConv(convId: Long)
 
     @Insert
     suspend fun insertAttachment(attachment: AttachmentEntity)
@@ -187,34 +158,44 @@ interface ChatDao {
 
     @Query("SELECT * FROM attachments WHERE attachmentId = :attachmentId")
     suspend fun getAttachmentById(attachmentId: String): AttachmentEntity?
-}
 
-//@Deprecated("已改为LlmConfig，附着于User")
-//@Entity(tableName = "chat_agents")
-//@Parcelize
-//data class AgentEntity(
-//    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-//    val name: String,
-//    val systemPrompt: String,
-//    val modelName: String,
-//    val apiEndpoint: String? = null,
-//    val apiKey: String? = null,
-//    val temperature: Float = 0.7f,
-//    val createdAt: Long = System.currentTimeMillis(),
-//) : Parcelable {
-//    val display: String
-//        get() = "$name-${modelName.take(3)}"
-//}
-//
-//@Deprecated("已改为更统一的平等聊天系统")
-//@Entity(
-//    tableName = "chat_messages", foreignKeys = [ForeignKey(
-//        entity = AgentEntity::class, parentColumns = ["id"], childColumns = ["agentId"]
-//    )], indices = [Index("agentId")]
-//)
-//data class ChatMessageEntity(
-//    @PrimaryKey(autoGenerate = true) val id: Long = 0, val agentId: Long? = null,
-//    // val username,
-//    val role: String, // "user" | "assistant"
-//    val content: String, val timestamp: Long = System.currentTimeMillis()
-//)
+    @Insert
+    suspend fun insertLlmConfig(config: LlmConfigEntity)
+
+    @Update
+    suspend fun updateLlmConfig(config: LlmConfigEntity)
+
+    @Delete
+    suspend fun deleteLlmConfig(config: LlmConfigEntity)
+
+    @Query("SELECT * FROM llm_config")
+    fun getAllLlmConfigs(): Flow<List<LlmConfigEntity>>
+
+    @Query("SELECT * FROM llm_config WHERE userId = :userId")
+    fun getLlmConfigByUser(userId: Long): LlmConfigEntity?
+
+    @Query("SELECT * FROM messages WHERE convId = :convId ORDER BY timestamp ASC")
+    fun getConvMessages(convId: Long): Flow<List<MessageEntity>>
+
+    @Query(
+        """
+                SELECT * FROM messages WHERE id IN (
+                    SELECT MAX(id) FROM messages 
+                    WHERE (convId, timestamp) IN (
+                        SELECT convId, MAX(timestamp) FROM messages GROUP BY convId
+                    )
+                    GROUP BY convId
+                )
+            """
+    )
+    fun getLatestMessagesPerConv(): Flow<List<MessageEntity>>
+
+    @Query("UPDATE conversations SET updatedAt = :timestamp WHERE id = :convId")
+    suspend fun updateConversationTime(convId: Long, timestamp: Long)
+
+    @Query("UPDATE members SET unread = unread + 1 WHERE convId = :convId AND userId != :senderId")
+    suspend fun incrementUnreadExceptSender(convId: Long, senderId: Long)
+
+    @Query("UPDATE members SET unread = 0 WHERE convId = :convId AND userId = :userId")
+    suspend fun clearUnread(convId: Long, userId: Long)
+}

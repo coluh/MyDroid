@@ -2,6 +2,7 @@ package com.destywen.mydroid.data.remote
 
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -21,6 +22,7 @@ data class ChatRequest(
     val maxTokens: Int? = null,
     val n: Int? = null,
     val stop: List<String>? = null,
+    val thinking: ThinkingConfig? = null,
     @SerialName("enable_thinking")
     val enableThinking: Boolean? =null,
     @SerialName("response_format")
@@ -33,6 +35,11 @@ data class ApiMessage(
     val role: String, // "system" | "user" | "assistant"
     val content: String
 ) : Parcelable
+
+@Serializable
+data class ThinkingConfig(
+    val type: String // "enabled" | "disabled"
+)
 
 @Serializable
 data class ChatRequestVision(

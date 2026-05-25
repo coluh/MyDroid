@@ -202,7 +202,6 @@ class JournalViewModel(
 
     fun generateReply(id: Int, enableVision: Boolean = false) = viewModelScope.launch {
         if (state.value.replyPrompt == null) {
-            AppLogger.i("JournalViewModel.generateReply", "journal reply prompt not set")
             _status.update { "回复提示词为空" }
             return@launch
         }

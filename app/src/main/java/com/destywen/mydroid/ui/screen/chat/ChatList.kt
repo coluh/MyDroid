@@ -43,6 +43,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -125,10 +126,6 @@ fun ChatListScreen(onConversationClick: (Long) -> Unit, onDrawer: () -> Unit) {
                         Icon(Icons.Default.Add, null)
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-//                        DropdownMenuItem(onClick = {
-//                            activeModal = ChatModal.UserList
-//                            expanded = false
-//                        }) { Text("登录") }
                         DropdownMenuItem(onClick = {
                             activeModal = ChatModal.CreateUser
                             expanded = false
@@ -136,10 +133,10 @@ fun ChatListScreen(onConversationClick: (Long) -> Unit, onDrawer: () -> Unit) {
                         DropdownMenuItem(onClick = {
                             expanded = false
                         }) { Text("创建群聊") }
-//                        DropdownMenuItem(onClick = {
-//                            viewModel.clear()
-//                            expanded = false
-//                        }) { Text("clear") }
+                        DropdownMenuItem(onClick = {
+                            viewModel.resetRepo()
+                            expanded = false
+                        }) { Text("reset repo") }
                     }
                 }
             )
@@ -153,13 +150,19 @@ fun ChatListScreen(onConversationClick: (Long) -> Unit, onDrawer: () -> Unit) {
                 .animateContentSize()
         ) {
             items(conversations, key = { it.id }) { conv ->
-                ConvListItem(conv.title, conv.avatar, conv.lastMessageTime, conv.lastMessagePreview, conv.unreadCount) {
+                ConvListItem(
+                    conv.title,
+                    conv.avatar,
+                    conv.latestMessageTime,
+                    conv.latestMessagePreview,
+                    conv.unreadCount
+                ) {
                     onConversationClick(conv.id)
                 }
             }
         }
 
-        when (val modal = activeModal) {
+        when (activeModal) {
             is ChatModal.CreateUser -> CreateUserDialog(
                 onDismiss = { activeModal = ChatModal.None },
                 onConfirm = { name, avatarUri ->
@@ -325,9 +328,7 @@ fun ImagePicker(modifier: Modifier = Modifier, imageUri: Uri?, onPick: (Uri) -> 
     }
 }
 
-
 class ChatListViewModel(
-    private val service: AiChatService,
     private val repository: ChatRepository,
     private val manager: FileManager,
     private val settings: AppSettings
@@ -336,8 +337,9 @@ class ChatListViewModel(
     val conversations: StateFlow<List<Conversation>> =
         repository.getAllConversations().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val users: StateFlow<List<UserEntity>> =
-        repository.getUsers().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-    val selfId: StateFlow<Long?> = settings.config.map { it.userId }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        repository.getAllUsers().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val selfId: StateFlow<Long?> =
+        settings.config.map { it.userId }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val error = MutableStateFlow<String?>(null)
 
     fun createUser(name: String, avatar: Uri?) = viewModelScope.launch(Dispatchers.IO) {
@@ -351,8 +353,8 @@ class ChatListViewModel(
         settings.update { it[Keys.USER_ID] = userId }
     }
 
-    fun clear() = viewModelScope.launch {
-        repository.clear()
+    fun resetRepo() = viewModelScope.launch {
+        repository.resetRepo()
     }
 
     companion object {
@@ -360,7 +362,6 @@ class ChatListViewModel(
             initializer {
                 val app = application as MyApplication
                 ChatListViewModel(
-                    app.apiService,
                     app.chatRepository,
                     app.fileManager,
                     app.settings

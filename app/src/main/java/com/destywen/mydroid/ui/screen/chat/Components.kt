@@ -39,6 +39,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import java.io.File
+import kotlin.math.absoluteValue
 
 
 @Composable
@@ -64,7 +65,7 @@ fun Avatar(avatar: String?, name: String, size: Int = 60, onClick: () -> Unit = 
         } else {
             val bgColor = remember(name) {
                 Color.hsv(
-                    hue = (name.hashCode() % 360).toFloat(),
+                    hue = (name.hashCode().absoluteValue % 360).toFloat(),
                     saturation = 0.5f,
                     value = 0.8f,
                 )
