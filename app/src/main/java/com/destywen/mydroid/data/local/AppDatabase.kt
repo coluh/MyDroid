@@ -267,9 +267,37 @@ abstract class AppDatabase : RoomDatabase() {
 
         val migrations11to12 = object : Migration(11, 12) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE `schedules` DROP COLUMN `groupId`")
+                db.execSQL(
+                    """
+                    CREATE TABLE schedules_new (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `description` TEXT,
+                        `due` INTEGER,
+                        `isCompleted` INTEGER NOT NULL DEFAULT 0,
+                        `groupName` TEXT DEFAULT NULL,
+                        `createdAt` INTEGER NOT NULL
+                    );
+                """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO schedules_new (id, title, description, due, isCompleted, createdAt)
+                    SELECT id, title, description, due, isCompleted, createdAt FROM schedules;
+                """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    DROP TABLE schedules;
+                """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    ALTER TABLE schedules_new RENAME TO schedules;
+                """.trimIndent()
+                )
+
                 db.execSQL("DROP TABLE IF EXISTS `schedule_groups`")
-                db.execSQL("ALTER TABLE `schedules` ADD COLUMN `groupName` TEXT DEFAULT NULL")
             }
         }
 

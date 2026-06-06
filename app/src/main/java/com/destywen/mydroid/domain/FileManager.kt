@@ -88,4 +88,10 @@ class FileManager(private val context: Context) {
             stream.bufferedReader().use { it.readText() }
         }
     }
+
+    suspend fun writeFile(uri: Uri, content: String) = withContext(Dispatchers.IO) {
+        context.contentResolver.openOutputStream(uri)?.use { out ->
+            out.write(content.toByteArray())
+        }
+    }
 }

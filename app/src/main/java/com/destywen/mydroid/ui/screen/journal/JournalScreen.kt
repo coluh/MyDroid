@@ -2,6 +2,7 @@ package com.destywen.mydroid.ui.screen.journal
 
 import android.content.ClipData
 import android.net.Uri
+import android.os.Environment
 import android.os.Parcelable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -110,6 +111,8 @@ fun JournalScreen(onNavigate: () -> Unit) {
     val viewModel: JournalViewModel = viewModel(factory = JournalViewModel.Factory(app))
     val state by viewModel.state.collectAsStateWithLifecycle()
     val username = state.username ?: stringResource(R.string.username)
+    val context = LocalContext.current
+    val documentsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: context.filesDir
 
     var activeModal by rememberSaveable { mutableStateOf<JournalModal>(JournalModal.None) }
     var query by rememberSaveable { mutableStateOf<String?>(null) }
@@ -121,7 +124,15 @@ fun JournalScreen(onNavigate: () -> Unit) {
 
     val importLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) {
         it?.let {
-            viewModel.loadOldJournals(it)
+            viewModel.importJournals(it)
+        }
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri?.let {
+            viewModel.exportAllJournals(it)
         }
     }
 
@@ -183,6 +194,10 @@ fun JournalScreen(onNavigate: () -> Unit) {
                             showHideTags = !showHideTags
                             expanded = false
                         }) { Text(if (showHideTags) "收起" else "展开") }
+                        DropdownMenuItem(onClick = {
+                            exportLauncher.launch("journals_backup.json")
+                            expanded = false
+                        }) { Text("导出") }
                         DropdownMenuItem(onClick = {
                             importLauncher.launch("application/json")
                             expanded = false

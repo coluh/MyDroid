@@ -27,18 +27,24 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.File
 
+@Serializable
 data class Comment(
-    val id: Int,
+    @Transient val id: Int = 0,
     val name: String,
     val role: String,
     val content: String,
     val timestamp: Long
 )
 
+@Serializable
 data class Journal(
-    val id: Int,
+    @Transient val id: Int = 0,
     val content: String,
     val tags: List<String>,
     val image: String?,
@@ -276,83 +282,71 @@ class JournalViewModel(
         return result
     }
 
-    fun loadOldJournals(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
-        _importing.update { 0 }
+    fun exportAllJournals(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+        val journals = journalDao.getAllJournals().first()
+        val comments = journalDao.getAllComments().first()
+        val journalComments = comments.groupBy { it.journalId }
 
-        val oldJournals = mutableListOf<Journal>()
-
-        val tableJson = manager.readFile(uri)
-        if (tableJson == null) {
-            _status.update { "fail to open file" }
-            _importing.update { null }
-            return@launch
-        }
-
-        @Serializable
-        data class OldJournal(
-            @SerialName("_id")
-            val id: Long,
-            val image: String,
-            val text: String,
-            val timestamp: Long,
-        )
-
-        @Serializable
-        data class OldMessage(val role: String, val content: String)
-
-        val items = Json.decodeFromString<List<OldJournal>>(tableJson)
-        _importingTotal.update { items.size }
-        val username = settings.config.first().username ?: "Destywen"
-        items.forEach { item ->
-            var content = item.text
-            var comments = emptyList<Comment>()
-            if (item.text.startsWith("[")) {
-                val messages = Json.decodeFromString<List<OldMessage>>(item.text)
-                content = messages.first().content
-                comments = messages.drop(1).map {
-                    val role = if (it.role == "user" || it.role == "用户") Role.USER else Role.ASSISTANT
-                    val name = if (role == Role.USER) username else "LLM"
-                    Comment(0, name, role, it.content, 0)
-                }
-            }
-            oldJournals.add(
-                Journal(
-                    image = item.image.takeIf { it.isNotBlank() },
-                    timestamp = item.timestamp,
-                    content = content,
-                    comments = comments,
-                    id = 0,
-                    tags = emptyList(),
-                )
-            )
-            _importing.update { oldJournals.size }
-        }
-
-        // add to database
-        oldJournals.forEachIndexed { idx, journal ->
-            val id = journalDao.upsertJournal(
-                JournalEntity(
-                    content = journal.content,
-                    image = journal.image,
-                    time = journal.timestamp
-                )
-            )
-            journal.comments.forEach { comment ->
-                journalDao.insertComment(
-                    CommentEntity(
-                        journalId = id.toInt(),
+        val data = journals.map { journal ->
+            Journal(
+                content = journal.content,
+                tags = journal.tag.split(","),
+                image = journal.image,
+                timestamp = journal.time,
+                comments = journalComments[journal.id]?.map { comment ->
+                    Comment(
                         name = comment.name,
                         role = comment.role,
                         content = comment.content,
-                        time = journal.timestamp
+                        timestamp = comment.time,
+                    )
+                } ?: emptyList()
+            )
+        }
+        val json = Json { prettyPrint = true }
+        val jsonString = json.encodeToString(data)
+
+        manager.writeFile(uri, jsonString)
+        _status.update { "保存成功！在${uri.path}" }
+    }
+
+    fun importJournals(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+        try {
+            val jsonString = manager.readFile(uri) ?: throw IllegalStateException("unable to read journals json file")
+            val json = Json { ignoreUnknownKeys = true }
+            val data = json.decodeFromString<List<Journal>>(jsonString)
+            _importingTotal.update { data.size }
+
+            _importing.update { 0 }
+            data.forEachIndexed { idx, journal ->
+                val journalId = journalDao.upsertJournal(
+                    JournalEntity(
+                        content = journal.content,
+                        tag = journal.tags.joinToString(","),
+                        image = journal.image,
+                        time = journal.timestamp,
                     )
                 )
+                journal.comments.forEach { comment ->
+                    journalDao.insertComment(
+                        CommentEntity(
+                            journalId = journalId.toInt(),
+                            name = comment.name,
+                            role = comment.role,
+                            content = comment.content,
+                            time = comment.timestamp,
+                        )
+                    )
+                }
+                _importing.update { idx + 1 }
             }
-            _importing.update { idx + 1 }
-        }
 
-        _importing.update { null }
-        AppLogger.i("loadOldJournals", "load ${oldJournals.size} journals")
+            _importing.update { null }
+            _status.update { "导入成功，共${data.size}条" }
+        } catch (e: Exception) {
+            _status.update { "导入失败：${e.message}" }
+            AppLogger.e("import_journal", e.message ?: "unknown")
+        }
     }
 
     companion object {
