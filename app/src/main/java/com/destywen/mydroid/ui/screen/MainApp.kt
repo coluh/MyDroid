@@ -22,6 +22,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.ModalDrawer
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
@@ -53,6 +54,7 @@ import com.destywen.mydroid.ui.screen.journal.JournalScreen
 import com.destywen.mydroid.ui.screen.log.LogScreen
 import com.destywen.mydroid.ui.screen.schedule.ScheduleScreen
 import com.destywen.mydroid.ui.screen.settings.SettingsScreen
+import com.destywen.mydroid.ui.screen.task.TaskScreen
 import com.destywen.mydroid.util.slideInFromLeft
 import com.destywen.mydroid.util.slideInFromRight
 import com.destywen.mydroid.util.slideOutToLeft
@@ -67,6 +69,7 @@ sealed class Screen(val route: String) {
     object Games : Screen("games")
     object Settings : Screen("settings")
     object Log : Screen("log")
+    object Task : Screen("task")
 
     object Conversation : Screen("chat/{convId}") {
         fun passArgs(convId: Long): String = "chat/${convId}"
@@ -83,6 +86,7 @@ enum class DrawerItem(val label: Int, val icon: ImageVector, val screen: Screen)
     SCHEDULE(R.string.schedule, Icons.Default.DateRange, Screen.Schedule),
     CHAT(R.string.chat, Icons.Default.Person, Screen.Chat),
     GAMES(R.string.games, Icons.Default.Star, Screen.Games),
+    TASK(R.string.task, Icons.AutoMirrored.Filled.List, Screen.Task),
     SETTINGS(R.string.settings, Icons.Default.Settings, Screen.Settings),
     LOG(R.string.log, Icons.Default.Info, Screen.Log),
 }
@@ -111,10 +115,6 @@ fun MainApp() {
     ) {
         NavHost(
             navController = navController, startDestination = Screen.Home.route,
-            enterTransition = { slideInFromRight() },
-            exitTransition = { slideOutToLeft() },
-            popEnterTransition = { slideInFromLeft() },
-            popExitTransition = { slideOutToRight() },
         ) {
             composable(Screen.Home.route) {
                 HomeScreen { scope.launch { drawerState.open() } }
@@ -133,6 +133,9 @@ fun MainApp() {
             }
             composable(Screen.Log.route) {
                 LogScreen { scope.launch { drawerState.open() } }
+            }
+            composable(Screen.Task.route) {
+                TaskScreen { scope.launch { drawerState.open() } }
             }
 
             // chat module

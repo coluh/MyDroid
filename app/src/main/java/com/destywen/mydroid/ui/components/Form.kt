@@ -4,6 +4,7 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -11,8 +12,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.Button
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
@@ -21,9 +25,18 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -61,7 +74,55 @@ fun DateTimePickerButton(datetime: Long?, onSelected: (Long) -> Unit) {
     }) {
         Icon(Icons.Default.DateRange, null)
         Spacer(Modifier.width(8.dp))
-        Text(datetime?.toDateTimeString()?:"点击选择时间")
+        Text(datetime?.toDateTimeString() ?: "点击选择时间")
+    }
+}
+
+@Composable
+fun ClickTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: @Composable (() -> Unit),
+) {
+    var show by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    var hasFocus by remember { mutableStateOf(false) }
+
+    LaunchedEffect(show) {
+        if (show) {
+            focusRequester.requestFocus()
+        }
+    }
+
+    Box(modifier = modifier, contentAlignment = Alignment.CenterStart) {
+        if (!show) {
+            Button(onClick = { show = true }) { label() }
+        } else {
+            BasicTextField(
+                value,
+                onValueChange,
+                modifier = Modifier
+                    .focusRequester(focusRequester)
+                    .border(1.dp, Color.Gray, RectangleShape)
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused != hasFocus) {
+                            hasFocus = focusState.isFocused
+                            if (!focusState.isFocused) {
+                                if (value.isBlank()) {
+                                    show = false
+                                }
+                            }
+                        }
+                    },
+                decorationBox = {
+                    Box {
+                        it()
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -98,7 +159,7 @@ fun BottomModal(
                 }
             }
 
-            BackHandler() {
+            BackHandler {
                 onDismissRequest()
             }
         }

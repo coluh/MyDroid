@@ -11,9 +11,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [
         JournalEntity::class, CommentEntity::class, LogEntity::class,
         ScheduleEntity::class, UserEntity::class, LlmConfigEntity::class,
-        ConversationEntity::class, MemberEntity::class, MessageEntity::class, AttachmentEntity::class
+        ConversationEntity::class, MemberEntity::class, MessageEntity::class, AttachmentEntity::class,
+        TaskEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -21,6 +22,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
     abstract fun logDao(): LogDao
     abstract fun scheduleDao(): ScheduleDao
+    abstract fun taskDao(): TaskDao
 
     companion object {
         @Volatile
@@ -32,7 +34,7 @@ abstract class AppDatabase : RoomDatabase() {
                     .addMigrations(
                         migration1to2, migration2to3, migration3to4, migration4to5,
                         migration5to6, migration6to7, migration7to8, migration8to9, migration9to10,
-                        migration10to11, migrations11to12, migration12to13
+                        migration10to11, migrations11to12, migration12to13, migration13to14,
                     )
                     .build()
                 INSTANCE = instance
@@ -305,6 +307,30 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("DROP TABLE IF EXISTS `chat_agents`")
                 db.execSQL("DROP TABLE IF EXISTS `chat_messages`")
+            }
+        }
+
+        val migration13to14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS tasks (
+                    	id 		            INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    	title 		        TEXT NOT NULL,
+                    	description 	    TEXT,
+                    	status 		        INTEGER NOT NULL,
+                    	priority 	        INTEGER NOT NULL,
+                    	category	        TEXT,
+                    	estimated_minutes   INTEGER,
+                    	energy_level 	    INTEGER NOT NULL,
+                    	actual_minutes	    INTEGER,
+                    	created_at 	        INTEGER NOT NULL,
+                    	updated_at 	        INTEGER NOT NULL,
+                    	completed_at 	    INTEGER,
+                    	due_date 	        INTEGER
+                    );
+                """.trimIndent()
+                )
             }
         }
     }
