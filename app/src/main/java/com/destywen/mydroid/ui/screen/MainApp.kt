@@ -1,6 +1,11 @@
 package com.destywen.mydroid.ui.screen
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -55,10 +60,6 @@ import com.destywen.mydroid.ui.screen.log.LogScreen
 import com.destywen.mydroid.ui.screen.schedule.ScheduleScreen
 import com.destywen.mydroid.ui.screen.settings.SettingsScreen
 import com.destywen.mydroid.ui.screen.task.TaskScreen
-import com.destywen.mydroid.util.slideInFromLeft
-import com.destywen.mydroid.util.slideInFromRight
-import com.destywen.mydroid.util.slideOutToLeft
-import com.destywen.mydroid.util.slideOutToRight
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
@@ -115,6 +116,7 @@ fun MainApp() {
     ) {
         NavHost(
             navController = navController, startDestination = Screen.Home.route,
+            modifier = Modifier.background(MaterialTheme.colors.background)
         ) {
             composable(Screen.Home.route) {
                 HomeScreen { scope.launch { drawerState.open() } }
@@ -139,7 +141,7 @@ fun MainApp() {
             }
 
             // chat module
-            composable(Screen.Chat.route) {
+            composable(Screen.Chat.route, popEnterTransition = { EnterTransition.None}) {
                 ChatListScreen(
                     onConversationClick = { navController.navigate(Screen.Conversation.passArgs(it)) },
                     onDrawer = { scope.launch { drawerState.open() } },
@@ -148,6 +150,14 @@ fun MainApp() {
             composable(
                 route = Screen.Conversation.route,
                 arguments = listOf(navArgument("convId") { type = NavType.LongType }),
+//                enterTransition = { slideInHorizontally { it } }, // list to conv, conv slide in from right
+//                exitTransition = { slideOutHorizontally { -it } }, // conv to sett, conv slide out to left
+//                popEnterTransition = { slideInHorizontally { -it } }, // sett to conv, conv slide in from left
+//                popExitTransition = { slideOutHorizontally { it } }, // conv to list, conv slide out to right
+                enterTransition = { fadeIn() + slideInHorizontally { it / 2 } },
+                exitTransition = { slideOutHorizontally { -it / 2 } },
+                popEnterTransition = { slideInHorizontally { -it / 2 } },
+                popExitTransition = { fadeOut() + slideOutHorizontally { it / 2 } },
             ) {
                 val convId = it.arguments?.getLong("convId") ?: 0L
                 ConversationScreen(
@@ -159,6 +169,8 @@ fun MainApp() {
             composable(
                 route = Screen.ConversationSetting.route,
                 arguments = listOf(navArgument("convId") { type = NavType.LongType }),
+                enterTransition = { slideInHorizontally { it } },
+                popExitTransition = { slideOutHorizontally { it } },
             ) {
                 val convId = it.arguments?.getLong("convId") ?: 0L
                 ConversationSettingsScreen(

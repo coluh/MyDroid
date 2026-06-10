@@ -6,26 +6,26 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 
-fun slideInFromRight(durationMs: Int = 300): EnterTransition =
+fun slideInFromRight(durationMs: Int = 250): EnterTransition =
     slideInHorizontally(
-        initialOffsetX = { fullWidth -> fullWidth },
+        initialOffsetX = { fullWidth -> fullWidth/2 },
         animationSpec = tween(durationMs)
     )
 
-fun slideOutToLeft(durationMs: Int = 300): ExitTransition =
+fun slideOutToLeft(durationMs: Int = 250): ExitTransition =
     slideOutHorizontally(
         targetOffsetX = { fullWidth -> -fullWidth },
         animationSpec = tween(durationMs)
     )
 
-fun slideInFromLeft(durationMs: Int = 300): EnterTransition =
+fun slideInFromLeft(durationMs: Int = 250): EnterTransition =
     slideInHorizontally(
         initialOffsetX = { fullWidth -> -fullWidth },
         animationSpec = tween(durationMs)
     )
 
-fun slideOutToRight(durationMs: Int = 300): ExitTransition =
+fun slideOutToRight(durationMs: Int = 250): ExitTransition =
     slideOutHorizontally(
-        targetOffsetX = { fullWidth -> fullWidth },
+        targetOffsetX = { fullWidth -> fullWidth/2 },
         animationSpec = tween(durationMs)
     )

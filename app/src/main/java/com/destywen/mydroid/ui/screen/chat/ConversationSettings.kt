@@ -48,10 +48,10 @@ import com.destywen.mydroid.data.local.LlmConfigEntity
 import com.destywen.mydroid.domain.ChatRepository
 import com.destywen.mydroid.domain.model.ConversationType
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 @Composable
@@ -165,22 +165,42 @@ class ConversationSettingsViewModel(
     settings: AppSettings,
 ) : ViewModel() {
 
-    val state = combine(
-        repository.getConvMembers(convId),
-        repository.getAllLlmConfigs(),
-        settings.config.map { it.userId },
-    ) { members, configs, selfId ->
-        if (members.size == 2) {
-            val userId = members.first { it.userId != selfId }.userId
-            ConvSettingsUiState(
-                type = ConversationType.PRIVATE,
-                userId = userId,
-                llmConfig = configs.find { it.userId == userId },
-            )
-        } else {
-            ConvSettingsUiState(ConversationType.GROUP, null, null)
+//    val state = combine(
+//        repository.getConvMembers(convId),
+//        repository.getAllLlmConfigs(),
+//        settings.config.map { it.userId },
+//    ) { members, configs, selfId ->
+//        if (members.size == 2) {
+//            val userId = members.first { it.userId != selfId }.userId
+//            ConvSettingsUiState(
+//                type = ConversationType.PRIVATE,
+//                userId = userId,
+//                llmConfig = configs.find { it.userId == userId },
+//            )
+//        } else {
+//            ConvSettingsUiState(ConversationType.GROUP, null, null)
+//        }
+//    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConvSettingsUiState())
+
+    private val _state = MutableStateFlow(ConvSettingsUiState())
+    val state: StateFlow<ConvSettingsUiState> = _state
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            val members = repository.getConvMembers(convId).first()
+            val configs = repository.getAllLlmConfigs().first()
+            val selfId = settings.config.map { it.userId }.first()
+            val state = if (members.size == 2) {
+                val userId = members.first { it.userId != selfId }.userId
+                ConvSettingsUiState(
+                    type = ConversationType.PRIVATE,
+                    userId = userId,
+                    llmConfig = configs.find { it.userId == userId }
+                )
+            } else ConvSettingsUiState(type = ConversationType.GROUP)
+            _state.value = state
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, ConvSettingsUiState())
+    }
 
     fun saveLlmConfig(llmConfig: LlmConfigEntity) = viewModelScope.launch(Dispatchers.IO) {
         repository.saveLlmConfig(llmConfig.copy(userId = state.value.userId))
