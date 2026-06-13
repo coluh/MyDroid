@@ -85,7 +85,7 @@ fun ClickTextField(
     modifier: Modifier = Modifier,
     label: @Composable (() -> Unit),
 ) {
-    var show by remember { mutableStateOf(false) }
+    var show by remember { mutableStateOf(!value.isBlank()) }
     val focusRequester = remember { FocusRequester() }
     var hasFocus by remember { mutableStateOf(false) }
 

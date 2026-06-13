@@ -54,6 +54,7 @@ import com.destywen.mydroid.R
 import com.destywen.mydroid.ui.screen.chat.ChatListScreen
 import com.destywen.mydroid.ui.screen.chat.ConversationScreen
 import com.destywen.mydroid.ui.screen.chat.ConversationSettingsScreen
+import com.destywen.mydroid.ui.screen.game.GameScreen
 import com.destywen.mydroid.ui.screen.home.HomeScreen
 import com.destywen.mydroid.ui.screen.journal.JournalScreen
 import com.destywen.mydroid.ui.screen.log.LogScreen
@@ -119,7 +120,9 @@ fun MainApp() {
             modifier = Modifier.background(MaterialTheme.colors.background)
         ) {
             composable(Screen.Home.route) {
-                HomeScreen { scope.launch { drawerState.open() } }
+                HomeScreen({ scope.launch { drawerState.open() } }, {
+                    navController.navigate(it)
+                })
             }
             composable(Screen.Journal.route) {
                 JournalScreen { scope.launch { drawerState.open() } }
@@ -128,7 +131,7 @@ fun MainApp() {
                 ScheduleScreen { scope.launch { drawerState.open() } }
             }
             composable(Screen.Games.route) {
-                HomeScreen { scope.launch { drawerState.open() } }
+                GameScreen { scope.launch { drawerState.open() } }
             }
             composable(Screen.Settings.route) {
                 SettingsScreen { scope.launch { drawerState.open() } }
@@ -141,7 +144,7 @@ fun MainApp() {
             }
 
             // chat module
-            composable(Screen.Chat.route, popEnterTransition = { EnterTransition.None}) {
+            composable(Screen.Chat.route, popEnterTransition = { EnterTransition.None }) {
                 ChatListScreen(
                     onConversationClick = { navController.navigate(Screen.Conversation.passArgs(it)) },
                     onDrawer = { scope.launch { drawerState.open() } },

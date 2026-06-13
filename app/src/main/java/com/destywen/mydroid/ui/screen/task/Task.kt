@@ -106,8 +106,8 @@ class TaskViewModel(private val dao: TaskDao) : ViewModel() {
         UiState(
             processingTask = taskGroup[TaskStatus.PROCESSING] ?: emptyList(),
             pendingTasks = taskGroup[TaskStatus.PENDING] ?: emptyList(),
-            completedTasks = taskGroup[TaskStatus.COMPLETED] ?: emptyList(),
-            cancelledTasks = taskGroup[TaskStatus.CANCELLED] ?: emptyList(),
+            completedTasks = taskGroup[TaskStatus.COMPLETED]?.sortedByDescending { it.completedAt } ?: emptyList(),
+            cancelledTasks = taskGroup[TaskStatus.CANCELLED]?.sortedByDescending { it.updatedAt } ?: emptyList(),
             error = error,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState())
@@ -235,6 +235,7 @@ fun TaskScreen(onNavigate: () -> Unit) {
                         modifier = Modifier.animateItem(),
                         onStart = { viewModel.startTask(it); scope.launch { listState.animateScrollToItem(0) } },
                         onEdit = { editing = task; showAddTaskDialog = true },
+                        onReuse = { editing = task; reusing = true; showAddTaskDialog = true },
                         onCancel = { viewModel.cancelTask(it) },
                     )
                 }
@@ -265,7 +266,14 @@ fun TaskScreen(onNavigate: () -> Unit) {
                         if (!reusing) {
                             viewModel.updateTask(it)
                         } else {
-                            viewModel.addTask(it.copy(id = 0, status = TaskStatus.PENDING))
+                            viewModel.addTask(
+                                it.copy(
+                                    id = 0,
+                                    status = TaskStatus.PENDING,
+                                    actualMinutes = null,
+                                    completedAt = null,
+                                )
+                            )
                             reusing = false
                         }
                         editing = null
@@ -458,7 +466,9 @@ fun TaskCard(task: TaskEntity, onClick: () -> Unit = {}) {
     } else {
         Color.hsl(120f, 2.8f / task.priority, 0.5f)
     }.copy(alpha = if (task.status in nonActiveStatuses) 0.5f else 1f)
-    val backgroundColor = MaterialTheme.colors.surface.copy(alpha = if (task.status in nonActiveStatuses) 0.5f else 1f)
+    val backgroundColor =
+        if (task.status in nonActiveStatuses) MaterialTheme.colors.background else MaterialTheme.colors.surface
+    var showUpdateTime by remember { mutableStateOf(true) }
 
     Card(
         modifier = Modifier
@@ -504,7 +514,16 @@ fun TaskCard(task: TaskEntity, onClick: () -> Unit = {}) {
                 Row { Text("完成于" + it.toDateTimeString(), style = MaterialTheme.typography.body2) }
             }
             Row {
-                Text(task.updatedAt.toDateTimeString(), style = MaterialTheme.typography.body2)
+                Text(
+                    if (showUpdateTime) {
+                        "更新于" + task.updatedAt.toDateTimeString()
+                    } else {
+                        "创建于" + task.createdAt.toDateTimeString()
+                    },
+                    style = MaterialTheme.typography.body2,
+                    modifier = Modifier.clickable(null, LocalIndication.current) {
+                        showUpdateTime = !showUpdateTime
+                    })
                 Spacer(Modifier.weight(1f))
                 task.category?.let {
                     Text(it, fontStyle = FontStyle.Italic)
